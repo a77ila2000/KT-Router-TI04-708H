@@ -1,6 +1,6 @@
 # 현재 작업 상태 — 2026-10-22 업데이트
 
-> 아래 기존 PCB 분석과 **미검증 실험 아이디어는 원문 그대로 보존**했다. 실험 후보를 성공한 TI04 설치 절차로 읽지 않도록, 후속 시험에서 확인한 결과와 다음 작업 조건을 먼저 정리한다. 이번 업데이트는 새 하드웨어 실험·플래시 쓰기 승인이 아니다.
+> **미검증 실험 아이디어(3~6절)는 원문 그대로 보존**했다. 2026-10-22 추가 검토에서 사양표와 연결된 블록도만 사진·로그·제조사 자료에 맞춰 정정했다. 실험 후보를 성공한 TI04 설치 절차로 읽지 않도록 확인 결과와 다음 작업 조건을 구분한다. 이번 업데이트는 새 하드웨어 실험·플래시 쓰기 승인이 아니다.
 
 | 항목 | 현재까지 확인한 결과 |
 | --- | --- |
@@ -37,7 +37,7 @@ python -m unittest discover -s tests -v
 
 ---
 
-<!-- Initial report and experimental proposals below are intentionally preserved. -->
+<!-- Experimental proposals in sections 3-6 are preserved; hardware specifications are corrected separately. -->
 
 # KT GiGA WiFi Wave2 (올레디오 TI04-708H / WGHE0101) PCB 정밀 분석 보고서
 
@@ -67,30 +67,32 @@ python -m unittest discover -s tests -v
 ```mermaid
 graph TD
     subgraph Core System
-        SoC["Qualcomm Atheros IPQ4018<br/>(Quad-Core ARM Cortex-A7 @ 716.8MHz)"]
-        RAM["Nanya DDR3L SDRAM<br/>256MB (NT5CC128M16JR-EK)"]
-        Flash["SPI NAND / NOR Flash (SOIC-8 / U33)<br/>128MB Flash"]
-        XTAL["48.000 MHz Crystal (Y1)"]
+        SoC["Qualcomm IPQ4018<br/>4-Core ARM Cortex-A7 / up to 717MHz"]
+        RAM["Nanya DDR3L SDRAM<br/>256MiB / DDR3L-1866 grade"]
+        NOR["GD25Q16 SPI NOR<br/>2MiB / package and location unconfirmed"]
+        NAND["MX35LFxGE4AB SPI NAND<br/>128MiB / package and location unconfirmed"]
+        XTAL["48.000 marking / Y1<br/>Crystal-reference candidate"]
         SoC --- RAM
-        SoC --- Flash
+        SoC --- NOR
+        SoC --- NAND
         SoC --- XTAL
     end
 
     subgraph RF Front-End (2.4G / 5G Wave2)
-        FEM1["5GHz FEM: Skyworks SKY85405"]
-        FEM2["5GHz FEM: Skyworks SKY85405"]
-        FEM3["2.4GHz FEM: Skyworks FEM"]
-        FEM4["2.4GHz FEM: Skyworks FEM"]
+        FEM1["5GHz PA: Skyworks SKY85405"]
+        FEM2["5GHz PA: Skyworks SKY85405"]
+        FEM3["2.4GHz RF path<br/>Components unconfirmed"]
+        FEM4["2.4GHz RF path<br/>Components unconfirmed"]
         SoC --- FEM1 & FEM2 & FEM3 & FEM4
     end
 
     subgraph Network & I/O
-        ETH["Integrated Gigabit Switch<br/>(1x WAN + 4x LAN)"]
+        ETH["Ethernet / 1x WAN + 4x LAN<br/>Exact PHY wiring unconfirmed"]
         MAG["LAN Transformers<br/>2x LG2P109N + 1x LG1P109N"]
-        USB["USB 2.0 / 3.0 Port (CON1)"]
+        USB["USB Type-A Port (CON1)<br/>Speed and firmware functions unconfirmed"]
         UART["UART Console (CN1: 4-Pin Header)"]
         LEDS["LEDs (PWR, WAN, LAN1-4, WIFI)"]
-        BTNS["Buttons (SW1 Reset, SW3 WPS, SW4 Fact)"]
+        BTNS["Button labels: SW1 Factory Reset<br/>SW3 WPS / SW4 Reset"]
         SoC --- ETH
         ETH --- MAG
         SoC --- USB
@@ -101,25 +103,37 @@ graph TD
 
 ---
 
-## 2. 주요 부품 정밀 분석
+## 2. 주요 부품 사양 — 사진·실기 로그·제조사 자료 대조
 
-| Qualcomm IPQ4018 SoC | NANYA 256MB DDR3L RAM | RF Front-End (FEM) 블록 |
+부품 자체의 정격과 이 보드의 실제 동작은 구분한다. **확인되지 않은 위치·접미사·전압은 추정값으로 채우지 않았다.** 위 블록도도 기능 개요이며 물리 배선/버스 토폴로지의 검증된 회로도가 아니다.
+
+| Qualcomm IPQ4018 SoC | NANYA 256MiB DDR3L RAM | RF 프런트엔드 블록 |
 | :---: | :---: | :---: |
 | ![SoC IPQ4018](./images/soc_ipq4018.jpg) | ![RAM Nanya](./images/ram_nanya.jpg) | ![RF Front-End](./images/rf_frontend.jpg) |
 
 
 | 부품 구분 | 실장 위치 (Silk) | 파트 넘버 (P/N) 및 마킹 | 제조사 | 세부 사양 및 역할 설명 |
 | :--- | :--- | :--- | :--- | :--- |
-| **메인 SoC** | **U16** | `IPQ4018 0VV NE023J3M` | Qualcomm | **Quad-Core ARM Cortex-A7 (@716.8MHz)**<br/>- 802.11ac Wave 2 (Wi-Fi 5) 2x2 2.4GHz + 2x2 5GHz 듀얼밴드 라디오 통합<br/>- 5포트 기가비트 이더넷 스위치 통합<br/>- OpenWrt 공식 타깃: `ipq40xx/generic` |
-| **시스템 RAM** | **U15** | `NT5CC128M16JR-EK` | NANYA | **256MB (2Gb) DDR3L SDRAM**<br/>- 구성: 128M x 16 bit, 1866Mbps (DDR3-1866)<br/>- 96-ball BGA 패키지<br/>- OpenWrt 구동 및 LuCI, SQM, WireGuard 등 운영에 매우 넉넉한 용량 |
-| **플래시 메모리** | **U33 / U-Bottom** | 8핀 패키지 (SOIC-8 / SOP-8) | Winbond / Macronix / GigaDevice 등 | **128MB SPI NAND Flash (또는 Dual Flash: NOR+NAND)**<br/>- 부트로더(U-Boot/SBL), 커널, 루트 파일시스템(UBIFS) 및 Wi-Fi ART(Calibration) 파티션 저장<br/>- 주변에 SPI 버스 라인용 직렬 저항(R217, R204, R205, R210 등 6개) 배치 확인 |
-| **5GHz RF FEM** | RF 블록 하단 | `SKY85405` (`010HG`) | Skyworks | **5GHz High-Power 802.11ac WLAN Front-End Module**<br/>- PA(전력증폭기) + LNA(저잡음증폭기) + SPDT 송수신 스위치 내장<br/>- 80MHz 채널 대역폭 및 MU-MIMO 지원 |
-| **2.4GHz RF FEM** | RF 블록 상단 | Skyworks FEM 시리즈 | Skyworks | **2.4GHz 802.11b/g/n WLAN Front-End Module**<br/>- 2x2 MIMO 구성으로 최대 400Mbps (256-QAM) 지원 |
-| **이더넷 트랜스포머**| T1 ~ T3 | `LG2P109N LF` (2개)<br/>`LG1P109N LF` (1개) | UB (Bothhand) | **1000BASE-T 기가비트 펄스 트랜스포머 (총 5포트)**<br/>- LG2P109N: 듀얼 포트용 (2x2 = 4개 포트 담당)<br/>- LG1P109N: 싱글 포트용 (1개 포트 담당) |
-| **클럭 발진기** | **Y1** | `48.000 D29F` | - | **48.000 MHz Crystal Oscillator**<br/>- IPQ4018 SoC 메인 시스템 클럭 레퍼런스 |
-| **UART 디버그 헤더**| **CN1** | 4-Pin Through-Hole Header | - | **시리얼 콘솔 인터페이스 (3.3V TTL, 115200 8N1)**<br/>- Pin 1 (사각 패드): VCC (3.3V)<br/>- Pin 2: TX<br/>- Pin 3: RX<br/>- Pin 4: GND |
-| **전원 관리 (DC-DC)**| U10, L25 등 | `2R2` 인덕터, 벅 컨버터 IC들 | Silergy / MPS 등 | **다채널 동기식 강압(Buck) 전원단**<br/>- 12V DC 입력 &rarr; Core 1.1V, RAM 1.35V, I/O 3.3V, USB 5V 변환 |
-| **USB 및 스위치** | CON1, SW1/3/4 | USB Type-A, 택트 스위치 | - | - **CON1**: 외장 스토리지 / 모뎀용 USB 포트<br/>- **SW1**: FACTORY RESET / **SW3**: WPS / **SW4**: RESET |
+| **메인 SoC** | **U16** | 사진의 `IPQ4018` 마킹 | Qualcomm | **4코어 ARM Cortex-A7, 제조사 명시 최대 717MHz** — 716.8MHz 고정 실측값이라는 뜻은 아님.<br/>- 2.4GHz 802.11n / 5GHz 802.11ac 계열 듀얼밴드, 2x2 구성. 802.11ac를 2.4GHz 규격으로 표기하지 않음.<br/>- 제조사 사양은 Ethernet 5포트 지원. 보드의 PHY/스위치 세부 배선은 별도 확인 필요.<br/>- `ipq40xx/generic`은 플랫폼 타깃이며 TI04 보드 공식 지원·최초 설치 이미지 검증과 별개. [Q] |
+| **시스템 RAM** | **U15** | `NT5CC128M16JR-EK` | NANYA | **2Gbit = 256MiB DDR3L SDRAM**, 128M x16, **96-ball BGA**. 이 구성/패키지는 기존 표가 맞음.<br/>- **DDR3L-1866 등급(1866Mb/s per pin, 1866MT/s)**은 부품 등급이지 보드의 동작 주파수가 아님.<br/>- 실기 부팅 로그 표기는 `DDR Frequency, 537 MHz`. 실행 중 모든 시점의 주파수·보드 전압을 실측한 것은 아님.<br/>- LuCI/SQM/WireGuard 성능·수용량은 별도 부하 시험 전에는 보장하지 않음. [N][L] |
+| **SPI NOR 플래시** | **실장 번호·패키지 미확인** | 로그의 `GD25Q16` — 전체 접미사 확인 필요 | GigaDevice | **2MiB (16Mbit) SPI NOR**. 단일 128MB 플래시로 합쳐 쓰지 않음.<br/>- 칩 표기·JEDEC ID·패키지와 실제 부트로더/환경/보드 데이터 영역은 덤프로 대조해야 함.<br/>- `U33`·SOP8 및 주변 저항의 SPI 기능을 아직 확정하지 않음. [L] |
+| **SPI NAND 플래시** | **실장 번호·패키지 미확인** | 로그의 `MX35LFxGE4AB`, 128MiB — 실물 전체 표기 확인 필요 | Macronix | **128MiB (1Gbit) SPI NAND**, 로그의 페이지 크기 2KiB.<br/>- NOR와 별개이며 ECC/OOB·배드블록·백업 형식을 구분해야 함.<br/>- 커널/루트·ART 등의 실제 저장 위치는 순정 영역 분석 전 미확정. [L] |
+| **5GHz RF PA** | RF 블록 하단, 실장 번호 재확인 필요 | 사진의 `SKY85405` 마킹. 자료 대조 대상 `SKY85405-11`, 실물 접미사는 미확정 | Skyworks | **5GHz 802.11ac용 PA + 전력 검출기**.<br/>- **PA+LNA+SPDT 통합 FEM이라는 기존 설명은 잘못됨.** 자료의 블록도는 PA·정합·검출기 구성.<br/>- 채널 폭·MU-MIMO는 SoC/무선 시스템 기능이며 이 PA 자체의 기능처럼 적지 않음. [S] |
+| **2.4GHz RF 경로 부품** | RF 블록 상단으로 분류했던 영역 | 정확한 부품번호 미확인 | **미확인** | 2.4GHz RF 경로로 분류한 사진 영역. 부품별 PA/LNA/스위치·제조사·연결은 추가 확인 필요.<br/>- `400Mbps / 256-QAM / 2x2`를 미식별 FEM의 고유 사양으로 단정하지 않음. |
+| **이더넷 트랜스포머** | T1~T3 영역, 개별 번호 대조 필요 | 사진의 `LG2P109N LF` 2개, `LG1P109N LF` 1개 | **실장품 제조사 추가 확인** | 5개 Ethernet 단자의 절연/결합용 자기 부품으로 관찰.<br/>- 기존의 `UB (Bothhand)` 단정은 보류. 실장품의 로고·데이터시트 대조 필요.<br/>- 이 부품은 패킷 스위치 IC가 아니며 내부 포트/핀 배선은 별도 확인 필요. |
+| **클럭 기준 부품** | **Y1** | `48.000 D29F` 마킹 | **미확인** | **48MHz 크리스털 기준 부품으로 추정**.<br/>- 마킹만으로 능동 `Crystal Oscillator` 모듈인지 수동 수정진동자인지 확정하지 않음.<br/>- 정확한 부품번호·전기적 연결·실측 주파수는 추가 확인 필요. |
+| **UART 디버그 헤더** | **CN1** | 4핀 Through-Hole, 사각 패드를 ①로 세는 시험 기준 | - | **시험 설정: 3.3V TTL 수준, 115200 8N1**.<br/>- ①: 약 3.3V 관찰, **VCC 추정이나 미확정·미연결 유지**.<br/>- ②: 보드 TX → 어댑터 RX, 부팅 로그 수신 확인.<br/>- ③: 어댑터 TX → 보드 입력, Linux 초기 에코 근거 확보. U-Boot 처리 확인과는 별개.<br/>- ④: 사용자 확인 GND. 어댑터 VCC/5V는 연결하지 않음. [L] |
+| **전원 관리** | U10/L25 주변 등, 기능별 위치 재확인 필요 | `2R2`는 인덕터 마킹. 전원 IC의 정확한 P/N은 미확인 | **미확인** | 다중 전원 레일/전원 변환부로 관찰.<br/>- **Silergy/MPS, 동기식 Buck, Core 1.1V 등을 실측 확정값으로 쓰지 않음.**<br/>- 입력 정격은 본체/어댑터 라벨 대조, 각 레일은 회로 확인·측정 필요. RAM 부품의 정격 전압과 보드의 실측값을 구분. |
+| **USB 및 버튼** | **CON1, SW1/SW3/SW4** | USB Type-A, 택트 스위치 | - | **CON1**: USB-A 포트. USB 2.0/3.0 규격·외장 스토리지/모뎀 기능은 이번 시험에서 검증하지 않음.<br/>- 사진의 버튼 표기: **SW1 FACTORY RESET / SW3 WPS / SW4 RESET**.<br/>- 표기 확인과 실제 GPIO·복구 부팅 기능 확인은 별개. |
+
+### 사양 근거와 판정 범위
+
+- **[Q]** [Qualcomm IPQ4018 제품 사양](https://www.qualcomm.com/networking-infrastructure/products/ipq4018): 4코어·최대 717MHz·Ethernet 5포트·2x2·2.4/5GHz·MU-MIMO 등 **제품 능력**. 실기 측정 결과를 대신하지 않는다.
+- **[N]** [NANYA DDR3L 공식 목록](https://www.nanya.com/en/Product/List/450/7591): `NT5CC128M16JR-EK`의 2Gb·x16·1866Mbps·96-ball BGA. **용량과 패키지는 오류가 아니라 유지 항목**이다.
+- **[S]** [Skyworks SKY85405-11 Product Summary](https://www.skyworksinc.com/-/media/B0BE21ADDC38445E93B967915E2A6B3A.pdf): 5GHz PA + 전력 검출기, 20핀 4x4mm QFN. 사진의 완전한 접미사·실장 위치를 추가 대조해야 한다.
+- **[L]** 비공개 원본 `uart-20261021-133347.bin`: NOR/NAND/DRAM과 부팅 단계의 DDR 537MHz 표기, 대응 송신 기록의 실제 에코 관찰. 전체 로그 대신 [인수인계 발췌/설명](docs/HANDOFF.md)을 공개한다.
+
+**아래 3~6절은 기존 실험 아이디어를 보존한 구간이다.** 해당 구간의 초기 가정과 현재 사양이 다르면 위의 수정 사양표와 후속 작업 기록을 기준으로 구분하며, 실험을 실제 시행하기 전에 다시 검토한다.
 
 ---
 

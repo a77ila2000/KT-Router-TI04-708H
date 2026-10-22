@@ -1,6 +1,6 @@
 # TI04-708H 다음 작업 인수인계
 
-정리 기준: **2026-10-22, 한국 시간**. 날짜별 결과는 과거 관찰이며 현재 케이블·COM 번호·로그인 세션·프로세스 상태를 뜻하지 않는다. README의 기존 분석과 미검증 실험 제안은 사용자 요청에 따라 원문 보존했다. 이 문서는 그 제안을 삭제하는 대신 실제 증거·진행 상태·실험 전 확인 조건을 보충한다.
+정리 기준: **2026-10-22, 한국 시간**. 날짜별 결과는 과거 관찰이며 현재 케이블·COM 번호·로그인 세션·프로세스 상태를 뜻하지 않는다. README 3~6절의 미검증 실험 제안은 사용자 요청에 따라 원문 보존했다. 이후 사양표 정정 요청에 따라 2절과 연결된 블록도는 사진·실기 로그·제조사 자료로 정정했다. 이 문서는 실험 제안을 삭제하는 대신 실제 증거·진행 상태·실험 전 확인 조건을 보충한다.
 
 ## 1. 완료한 조사와 남은 질문
 
@@ -114,6 +114,9 @@ Windows에 Ghidra가 설치되어 있거나 REA MCP가 연결되어 있어도 ra
 
 ## 참고 근거
 
+2026-10-22 사양표 재검토: 부팅 원본에는 `S - DDR Frequency, 537 MHz`가 있으며 RAM의 DDR3L-1866 부품 등급과 구분했다. NANYA 공식 목록의 2Gb·x16·96-ball BGA는 기존 표와 일치한다. SKY85405의 PA+LNA+SPDT 통합 FEM 설명은 제조사 Product Summary와 달라 PA+전력 검출기로 정정했다. SoC는 최대 717MHz 제품 사양과 실기 동작을 구분했고, 칩 위치·패키지·미식별 RF/전원 부품·CN1 ①의 역할은 미확인으로 표시했다. 원본 사진과 실험 제안 구간은 수정하지 않았다.
+
+- [Qualcomm IPQ4018](https://www.qualcomm.com/networking-infrastructure/products/ipq4018), [NANYA DDR3L 공식 목록](https://www.nanya.com/en/Product/List/450/7591), [Skyworks SKY85405-11 Product Summary](https://www.skyworksinc.com/-/media/B0BE21ADDC38445E93B967915E2A6B3A.pdf)
 - [U-Boot v2012.07 입력 검사](https://github.com/u-boot/u-boot/blob/v2012.07/common/main.c#L83-L247), [환경 도구](https://github.com/u-boot/u-boot/blob/v2012.07/tools/env/README)
 - [flashrom CH341A 전압 주의사항](https://github.com/flashrom/flashrom/blob/main/doc/supported_hw/supported_prog/ch341ab.rst), [인서킷 읽기 제약](https://github.com/flashrom/flashrom/blob/main/doc/user_docs/in_system.rst)
 - [GigaDevice GD25Q16C](https://www.gigadevice.com/product/flash/spi-nor-flash/gd25q16c), [Macronix Serial NAND](https://www.macronix.com/en-us/products/NAND-Flash/Serial-NAND-Flash/Pages/default.aspx)
