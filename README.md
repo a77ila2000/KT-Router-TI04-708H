@@ -1,3 +1,44 @@
+# 현재 작업 상태 — 2026-10-22 업데이트
+
+> 아래 기존 PCB 분석과 **미검증 실험 아이디어는 원문 그대로 보존**했다. 실험 후보를 성공한 TI04 설치 절차로 읽지 않도록, 후속 시험에서 확인한 결과와 다음 작업 조건을 먼저 정리한다. 이번 업데이트는 새 하드웨어 실험·플래시 쓰기 승인이 아니다.
+
+| 항목 | 현재까지 확인한 결과 |
+| --- | --- |
+| 대상 | TI04-708H / allRadio, 조사 당시 순정 1.4.0. KM08·R6850 절차와 구분 |
+| 플래시 | 실제 UART 로그: **GD25Q16 2MiB SPI NOR + MX35LFxGE4AB 128MiB SPI NAND**. 실물 접미사·패키지·영역 배치는 미확인 |
+| UART 수신 | CH343, 115200 8N1로 순정 부팅 로그 확보 |
+| UART 입력 | Linux 초기 단계에서 실제 `g`·`^[` 에코 관찰. U-Boot 프롬프트/로그인 셸 진입은 아직 없음 |
+| 자동 부팅 중단 | `Press any key to stop autoboot:  0` 표시. Esc 사전/연속 송신 시험에도 커널로 진행 |
+| 웹 경로 | 조사한 8899 페이지/스크립트에서 업로드 경로 미발견. 8801 관리자 인증/메뉴는 확보 못함 |
+| 설치 후보 | `openwrt-kt9200-*.bin` 두 파일은 sysupgrade TAR이며 부트로더·최초 factory/initramfs 이미지가 아님 |
+| CH341A | SOIC8·SOP8 클립·1.8V 어댑터 포함 세트 구매. 실물 전압·연결·읽기 성공은 아직 미검증 |
+| 쓰기/설치 | 이번 조사에서 플래시 쓰기·지우기·부트로더 교체·OpenWrt RAM/영구 설치를 수행하지 않음 |
+
+**다음 작업:** 칩/프로그래머 식별 → 전압 확인 → 2MiB NOR 원본 3회 읽기·검증 → 실제 부트로더/환경의 UART 중단 코드 분석. **2MiB NOR만 읽어서는 128MiB NAND를 포함하는 전체 장비 백업이 되지 않는다.**
+
+- [후속 시험 기록·실험 후보와의 차이·다음 작업 체크리스트](docs/HANDOFF.md)
+- 사각 CN1 ①은 약 3.3V 측정만으로 VCC가 확정되지 않는다. ②→어댑터 RX, ③→어댑터 TX, ④→GND 배선에서는 Linux 초기 입력 에코를 관찰했다. VCC·5V 전원선은 미연결로 시험했다.
+- 아래의 환경 패치·핀 글리칭·버튼 복구·공통 TFTP 명령은 **검증되지 않은 원래 아이디어**다. 환경 패치 성공, 복구 IP, 강제 셸 진입, 안전한 RAM 주소를 확인했다는 뜻은 아니다. 실제 시행 전 별도 검토가 필요하다.
+- `CONFIG_AUTOBOOT_KEYED`는 표준 U-Boot의 **중단 문자열 검사** 분기이며 입력 검사 제거와 같은 뜻이 아니다. `bootdelay=0`의 효과도 빌드 옵션과 제조사 수정에 따라 달라진다. [표준 소스](https://github.com/u-boot/u-boot/blob/v2012.07/common/main.c#L83-L247)
+- 일부 CH341A 보드는 VCC 3.3V와 달리 신호선이 약 5V일 수 있다. GD25Q16C는 제조사 기준 2.7~3.6V이므로 실제 접미사를 확인하고 **1.8V 어댑터를 무조건 쓰지 않는다.** [flashrom 주의사항](https://github.com/flashrom/flashrom/blob/main/doc/supported_hw/supported_prog/ch341ab.rst), [칩 사양](https://www.gigadevice.com/product/flash/spi-nor-flash/gd25q16c)
+
+### 읽은 파일 검증 도구
+
+Python 3.8+로 로컬 파일만 비교한다. 장비/프로그래머를 조작하지 않는다.
+
+```sh
+python scripts/verify_dump.py --expected-size 2097152 dump/nor-read1.bin dump/nor-read2.bin dump/nor-read3.bin
+python -m unittest discover -s tests -v
+```
+
+최소 2개 비교를 지원하되 실제 작업은 별도 읽기 3회를 권장한다. 빈 파일·전부 00/FF·중복 파일·예상 크기 불일치·해시 불일치·읽기 오류를 실패로 처리한다. **성공 메시지는 반복 일치 검사 통과일 뿐 올바른 원본/복구 가능성의 보증이 아니다.**
+
+원본 덤프·추출물·펌웨어·로그·세션은 기본 Git 제외 대상이다. 개별 키·계정·쿠키를 추가하지 않는다. 아래 기존 사진/본문에는 식별 라벨이 있을 수 있고, `.gitignore`가 과거 Git 이력이나 이미 추적된 자료를 비식별화하지는 않는다.
+
+---
+
+<!-- Initial report and experimental proposals below are intentionally preserved. -->
+
 # KT GiGA WiFi Wave2 (올레디오 TI04-708H / WGHE0101) PCB 정밀 분석 보고서
 
 이 보고서는 제공해주신 PCB 사진들을 바탕으로 공유기의 세부 하드웨어 부품 구성을 분석하고, **SOIC-8 클립을 이용한 펌웨어 덤프 주의사항**, **REA(Reverse Engineer Anything)를 통한 바이너리 분석**, 그리고 **OpenWrt 포팅 및 설치 로드맵**을 상세히 정리한 문서입니다.

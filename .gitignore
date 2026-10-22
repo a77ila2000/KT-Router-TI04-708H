@@ -2,3 +2,27 @@
 *.bak
 __pycache__/
 *.pyc
+
+# Private device data: keep only the empty directory placeholders.
+/dump/*
+!/dump/.gitkeep
+/extracted/*
+!/extracted/.gitkeep
+/openwrt/*
+!/openwrt/.gitkeep
+*.bin
+*.rom
+*.img
+*.dump
+*.pcap
+*.pcapng
+*.har
+*.saz
+*.log
+*.jsonl
+*.clixml
+.env
+.env.*
+/private/
+/usb-ttl-monitor/
+/ti04-admin-login/
