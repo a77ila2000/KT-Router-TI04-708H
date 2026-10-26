@@ -1,198 +1,152 @@
-# KT GiGA WiFi Wave2 (올레디오 TI04-708H) OpenWrt 설치 경로 및 기술 검증 보고서
+# TI04-708H OpenWrt 진행 결과와 설치 제약
 
-**작성일시**: 2026-10-26  
-**대상 장비**: KT GiGA WiFi Wave2 (올레디오 TI04-708H / 보드 리비전 WGHE010100)  
-**분석 환경**: `D:\ai\firmware` 및 `D:\ai\KT-Router-TI04-708H` 내 실기 로그, NOR 덤프 바이너리, 역어셈블 코드, 웹 자산  
+기록 기준: **2026-10-26, 한국 시간**. 사용자 소유 allRadio TI04-708H 한 대에서 확인한 결과다. 초기 검토 문서의 단정과 이후 실기 결과를 구분해 갱신했다.
 
----
+**현재 완료: NOR 환경 패치, U-Boot 양방향 콘솔, NAND 전체 백업, OpenWrt RAM 부팅 및 유선 통신. 아직 미완료: NAND에 OpenWrt 영구 기록, NAND 부팅, 재부팅 후 설정 유지, WAN 인터넷 및 무선 송수신 시험.**
 
-## 1. 장비 아키텍처 및 펌웨어 구성 요약
+- 시행 순서와 실패 원인: [실험·실패 이력](docs/EXPERIMENT_LOG_20261026.md).
+- 다음 작업과 과거 조사: [인수인계](docs/HANDOFF.md).
+- 원래 README 3~6절의 미검증 실험 아이디어는 보존했다. 해당 예제보다 이 문서의 실기 결과를 우선한다.
 
-- **메인 SoC**: Qualcomm Atheros IPQ4018 (4-Core ARM Cortex-A7, 최대 717MHz)
-- **시스템 RAM**: Nanya NT5CC128M16JR-EK 256MiB DDR3L SDRAM (DDR 537MHz 동작)
-- **이중 플래시(Dual Flash) 구조**:
-  - **SPI NOR Flash (U33 실장)**: GigaDevice `GD25Q16CSIG` (2MiB = 2,097,152 바이트, SOP-8 패키지)
-    - 역할: 퀄컴 부트 체인 및 부트로더 저장 (`SBL1`, `MIBIB`, `QSEE/TZ`, `CDT`, `DDRPARAMS`, `APPSBLENV`, `APPSBL`, `ART`)
-  - **SPI NAND Flash**: Macronix `MX35LFxGE4AB` (128MiB = 1Gbit)
-    - 역할: 대용량 UBI 파티션 저장 (Linux Kernel FIT 이미지, SquashFS Rootfs, 통신사 데몬 등)
-- **무선 프런트엔드**: Skyworks `SKY85405` (5GHz PA + 전력 검출기) / 2.4GHz 내장
-- **디버그 콘솔(CN1)**: 4핀 헤더 (①: VCC(미연결 유지) / ②: Board TX &rarr; 어댑터 RX / ③: Board RX &larr; 어댑터 TX / ④: GND)
-- **물리 버튼**: SW1 (`FACTORY RESET`), SW3 (`WPS`), SW4 (`RESET`)
+## 1. 실제 확인한 하드웨어와 저장 영역
 
----
+| 항목 | 확인 결과 / 한계 |
+|---|---|
+| SoC / RAM | IPQ4018, 256MiB. 순정 로그의 `DDR Frequency, 537 MHz`는 관측 표기이며 RAM 부품의 DDR3L-1866 등급과 구분 |
+| NOR | U33, GD25Q16CSIG, SOP-8, JEDEC `C8 40 15`, 2MiB. CH341A로 독립 읽기와 기록 후 검증 수행 |
+| NAND | Macronix SPI NAND, 128MiB. 순정 표기는 `MX35LFxGE4AB`, 실물 전체 접미사는 미확정 |
+| NAND geometry | page2048 / OOB64 / erase131072바이트. 순정 U-Boot와 OpenWrt에서 관측 |
+| UART | 115200 8N1. 사용한 CN1 배선은 ②→어댑터 RX, ③←어댑터 TX, ④→GND. ①은 미연결; 전압만으로 VCC 역할을 확정하지 않음 |
+| 버튼 | SW1 FACTORY RESET, SW3 WPS, SW4 RESET 라벨 확인. GPIO2/63과 각 스위치의 전기적 대응은 미확정 |
+| 무선 | SKY85405 계열은 5GHz PA+전력 검출기. 2.4GHz의 외부 RF 부품·구성은 이 결과로 단정하지 않음 |
 
-## 2. [방법 1] 별도 장비(ROM 라이터 등) 없는 기본 상태 설치 가능성 조사 및 기술 검증
+순정 `smeminfo`가 표시한 영역은 다음과 같다. 끝 주소는 포함하지 않는다.
 
-사용자 요청 우선순위 1번인 **"별도의 하드웨어 장비로 NOR을 변경하지 않고 기본 상태에서 설치하는 방법"**에 대해 웹 UI, 네트워크 서비스/취약점, UART 콘솔 세 가지 측면에서 정밀 검증을 수행했습니다.
+| 저장 장치 | 파티션 | 범위 |
+|---|---|---|
+| NOR | SBL1 | `0x000000–0x040000` |
+| NOR | MIBIB | `0x040000–0x060000` |
+| NOR | QSEE | `0x060000–0x0C0000` |
+| NOR | CDT | `0x0C0000–0x0D0000` |
+| NOR | DDRPARAMS | `0x0D0000–0x0E0000` |
+| NOR | APPSBLENV | `0x0E0000–0x0F0000` |
+| NOR | APPSBL | `0x0F0000–0x170000` |
+| NOR | ART | `0x170000–0x180000` |
+| NAND | 순정 rootfs/UBI | **`0x0000000–0x2000000` (앞32MiB)** |
+| NAND | 보존 대상 후반부 | `0x2000000–0x8000000` (뒤96MiB), 다른 UBI sequence의 데이터도 관측 |
 
-### 2.1. 웹 UI 관리자 권한을 통한 펌웨어 업데이트 메뉴 활성화 가능성 &rarr; **[불가]**
+**물리 NAND가 128MiB라는 사실은 전체를 하나의 설치 대상으로 지워도 된다는 뜻이 아니다.** 이전의 128MiB 전체 `ubi` 후보 DTS는 실제 순정 부팅 범위와 달랐다.
 
-1. **일반 사용자 웹 UI (포트 8899 / `http://172.30.1.254:8899`)**:
-   - 시스템 관리 메뉴 경로: `/system/id` (관리 계정 설정), `/system/config` (설정 초기화), `/system/reboot` (시스템 재시동)의 3개 페이지만 존재합니다.
-   - `/system/config` 페이지 및 공통 자바스크립트(`jquery.custom.js`, `board.custom.js` 등) 정적 분석 결과:
-     - 폼 내부에는 hidden 필드인 `configfilename`만 존재하며, 파일 업로드용 `<input type="file">` 태그나 펌웨어 업그레이드 엔드포인트가 전혀 구현되어 있지 않습니다.
-     - "초기 설정 복원"은 파일 복원이 아닌 단순 `POST configreset` 후 재부팅 트리거입니다.
-2. **별도 관리자 웹 UI (포트 8801 / `http://172.30.1.254:8801/admin/login/login`)**:
-   - LAN 포트 스캔을 통해 포트 8801에 별도의 최고관리자 로그인 화면이 존재함을 확인했습니다.
-   - KT 라우터의 일반적인 비밀번호 조합(admin / MAC 뒤 6자리 등) 72종을 준비하여 테스트했으나 모두 인증에 실패했습니다 (5회 실패 시 10분 잠금).
-   - **결정적 근거**: 장비 UART 로그에서 `Change admin id/pwd by kt hash string` 메시지가 확인되었습니다. KT 순정 펌웨어는 공장 초기화 시 기기 고유 식별값(시리얼, MAC 등)과 KT 고유의 비공개 솔트/해시 알고리즘을 결합하여 관리자 비밀번호를 생성하므로 기본값 추측으로 진입할 수 없습니다.
-   - **구조적 한계**: KT의 라우터 관리 아키텍처상 펌웨어 업데이트는 웹 UI를 거치지 않고 WAN 구간의 **TR-069 (CWMP)**를 통해 KT 중앙 ACS 서버에서 전자서명된 바이너리를 푸시하는 방식으로만 수행됩니다. 따라서 관리자 웹에 로그인하더라도 로컬 펌웨어 파일 업로드 메뉴 자체가 존재하지 않습니다.
+## 2. 웹·버튼 경로에 대한 정정
 
-### 2.2. 로컬 네트워크 서비스 취약점 분석 &rarr; **[불가]**
+| 이전 표현 | 증거에 맞춘 판정 |
+|---|---|
+| 8899/8801 모두 로컬 업로드 기능 없음 | 확인한 일반 관리 화면·공통 스크립트에서 업로드 경로를 확보하지 못했다. **8801 인증 후 메뉴는 확보하지 못했으므로 기능 부재를 단정하지 않음** |
+| 관리자 암호 72개 모두 실패 | 마지막 보존 상태는 준비72개 중 `nextIndex=25`, 요청35회 및 앞선 별도 실패2회. 잠금 재시험이 포함돼 요청 수를 서로 다른 암호 수로 계산할 수 없음. 성공 인증 없음 |
+| 기기 식별값+비공개 salt로 암호 생성 확정 | `Change admin id/pwd by kt hash string` 로그는 근거지만, 정확한 입력·알고리즘·salt·생성 규칙은 복원하지 못함 |
+| 펌웨어는 TR-069 전자서명 푸시로만 업데이트 | 원격 관리 경로의 단서와 로컬 메뉴 미발견을 업데이트 방식의 독점성·서명 검증 증명으로 확대하지 않음 |
+| 네트워크 취약점 경로 불가능 | 시행한 DDNS/UPnP/포트 조사에서 UART 제어·명령 실행·업로드 경로를 확보하지 못한 결과. 전체 취약점 부재의 증명은 아님 |
+| GPIO63=SW4, SW1+SW4로 진입 가능 | 후보 DTS의 reset GPIO 번호와 실물 SW 번호는 별개. 실제 조합 시험에서는 프롬프트를 확인하지 못함 |
 
-- **DDNS 명령 주입 시험**: `/service/ddns`의 POST 요청을 분석한 결과, 특수문자(`;`, `|`, `&`, 백틱, `$`) 필터링(`CheckHtmlString()`)이 존재하며, 백도어 실행을 위한 임의 명령어 전송 시 서버 측에서 저장을 거부했습니다.
-- **UPnP (포트 35500)**: SSDP 응답으로 확인된 엔드포인트(`/rootDesc.xml`, `/WANIPCn.xml` 등)는 표준 포트포워딩 및 상태 조회 액션만 제공하며, 임의 명령 실행이나 펌웨어 다운로드 기능은 없습니다.
-- **원격 관리 포트**: LAN 상에서 텔넷(23), SSH(22), CWMP(7547) 포트는 모두 타임아웃(차단) 상태입니다.
+로그인 반복 시험은 중단된 과거 조사다. 이 문서 갱신 과정에서 로그인 후보 추가나 새 인증 요청을 하지 않았다.
 
-### 2.3. UART 직렬 콘솔 진입 가능성 및 락(Lock) 원인 분석 &rarr; **[APPSBL 역어셈블 검증 완료]**
+## 3. 제조사 autoboot와 추가 명령 제한
 
-1. **물리적 UART 통신 검증**:
-   - CN1 핀 연결 (②: TX, ③: RX, ④: GND, 115200 8N1).
-   - U-Boot 2012.07 배너 및 리눅스 부팅 로그 수신 확인.
-   - 리눅스 초기 부팅 구간에서 문자 `g` 및 제어문자 `^[`가 반환되는 TTY 에코 동작을 확인하여 **보드 RX 및 USB-TTL 어댑터 TX 하드웨어 경로가 정상 도통됨을 증명**했습니다.
-2. **Autoboot 중단 실패 현상**:
-   - 부팅 중 콘솔에 `Press any key to stop autoboot:  0` 문구가 출력되지만, 부팅 전/중/후로 Esc, Space, Enter, 숫자 키를 지속적으로 전송해도 중단되지 않고 곧바로 커널(`UBI: attaching mtd2...`)로 진입했습니다.
-3. **부트로더(APPSBL) 역어셈블 분석을 통한 락(Lock) 메커니즘 규명**:
-   - NOR 플래시 오프셋 `0x100000`에서 추출한 U-Boot 바이너리(`appsbl-load.bin`)의 autoboot 루틴(`0x8731ad54 ~ 0x8731af50`)을 정밀 분석하여 통신사 순정 락 구조를 완벽하게 밝혀냈습니다.
-   - U-Boot는 환경변수 `bootdelay` 값을 읽어 다음과 같이 동작합니다:
+대상 APPSBL은 NOR에서 추출한 U-Boot 2012.07이다. 아래 주소는 링크 가상주소이며 모든 실행 시점의 재배치 주소라는 뜻은 아니다.
 
-| 저장된 `bootdelay` 값 | 내부 Mode | 동작 방식 및 autoboot 중단 조건 |
-| :--- | :---: | :--- |
-| **`0` (순정 기본값)** | **Mode 0** | **[2중 락 구조]**<br/>1) 하드웨어 GPIO 검사: `GPIO2 == 0 && GPIO63 == 0` (두 핀 모두 접지/LOW)<br/>2) 1)이 참인 경우에 한해 1초간 UART 입력 대기 후 **비밀 문자열 `@tnie`** 입력 시에만 중단<br/>※ GPIO 조건이 거짓이면 UART 입력을 **전혀 검사하지 않고 0초 만에 커널로 직행** |
-| **`2012`** | **Mode 1** | **[ESC 폴링 모드]**<br/>화면에 `Press ESC to stop autoboot:  1 ` 출력 후 약 500ms 동안 UART에서 `0x1B`(ESC) 입력을 감지하면 **즉시 U-Boot 프롬프트로 진입** (GPIO 검사 없음) |
-| **`2` 또는 미설정** | **Mode 2** | `GPIO2 == 0 && GPIO63 == 0` 검사 후 참이면 비밀번호 없이 중단 |
-| **그 외 (3, 5, 10 등)** | **Mode 0** | 일반 U-Boot와 달리 0으로 정규화되어 Mode 0으로 동작 (일반적인 초 단위 대기 불가) |
+| `bootdelay` 값 | 내부 모드 | 이 바이너리에서 확인한 동작 |
+|---|---|---|
+| `0`, 또는 `2`/`2012` 이외의 값 | 0 | GPIO2/63 관련 raw 레지스터 값 검사와 추가 UART 문자열 비교 경로. 일반 ESC 카운트다운과 다름 |
+| `2` 또는 미설정 | 2 | GPIO 검사 경로. 일반적인 ‘2초 키 입력 대기’로 해석하면 안 됨 |
+| `2012` | 1 | GPIO 검사를 건너뛰고 ESC `0x1B`를 검사. 실기에서 `Press ESC to stop autoboot: 1` 확인 |
 
-### 2.4. 기본 상태(장비 없이)에서 설치 가능한가? &rarr; **[실질적 결론: 불가 (단 1가지 극단적 예외)]**
+- autoboot 주요 구간: `0x8731AD54–0x8731AF50`.
+- GPIO 조회 함수 `0x87302734`는 해당 raw 레지스터 값을 반환한다. 두 핀을 단순히 접지/LOW로 만들라는 지침으로 바꿀 수 없다.
+- mode0의 추가 문자열 대기는 코드상 무입력 약10초 경로이며, 기존 보고서의 ‘1초 내’ 단정은 정정한다.
+- mode1의 ESC 폴링은 약0.5초로 해석되는 코드다. `2012`는 초 단위 대기 시간이 아니다.
+- 초기 공백·ESC·숫자 송신과 버튼 조합은 프롬프트 진입에 실패했다. 성공한 경로는 다음 절의 환경 패치다.
 
-- **순정 상태의 결론**: 웹 UI 업데이트 경로는 존재하지 않으며, UART는 `bootdelay=0` 상태에서 `GPIO2=0`, `GPIO63=0`, 그리고 비밀 문자열 `@tnie` 입력이라는 3중 조건을 요구합니다.
-- **유일한 이론적 무장비 시도 경로**:
-  - `GPIO63`은 DTS상 `SW4 (RESET)` 버튼에 매핑되어 있습니다.
-  - 만약 `GPIO2`가 보드 전면의 `SW1 (FACTORY RESET)` 또는 `SW3 (WPS)` 버튼에 연결되어 있다면:
-    1. PC 시리얼 터미널을 115200 8N1로 열어둠.
-    2. 보드의 **`SW4 (RESET)`와 `SW1 (또는 SW3)` 두 버튼을 동시에 손으로 꾹 누른 상태**에서 전원 어댑터 연결.
-    3. 전원이 켜지자마자 1초 이내에 시리얼 터미널로 **`@tnie\r`** 문자열을 즉시 전송.
-    4. U-Boot가 두 GPIO의 LOW 상태를 감지하고 `@tnie` 문자열을 확인하면 autoboot를 중단하고 `ipq40xx# ` 프롬프트로 진입 가능.
-  - **한계**: 만약 `GPIO2`가 버튼이 아닌 내부 테스트 포인트이거나 풀업 저항에 묶여 있다면 물리적 접지 도구(핀셋/점퍼선 등) 없이는 불가능합니다. 따라서 100% 장비 없이 안정적으로 진입하는 것은 보장되지 않습니다.
+**프롬프트 진입 후에도 추가 제한이 있었다.** `help`, `nand read`, `tftpput`이 에코만 남기고 돌아오는 현상을 확인했다. 공통 함수 `0x873042C4`가 `debug_mode` 값과 정확한 문자열 `on`을 비교하고, 제한된 명령은 조건이 맞지 않으면 무출력 반환한다. 현재 세션에서만 `setenv debug_mode on`을 적용한 뒤 도움말·NAND 읽기·TFTP가 실제 동작했다. 이 목적에 `saveenv`는 실행하지 않았다.
 
----
+## 4. NOR 패치: 첫 실패와 검증된 재기록
 
-## 3. [방법 2] SPI NOR 최소 변경을 통한 안정적 UART 진입 및 검증 결과
+1. 원본 NOR 독립3회 읽기는 크기2,097,152바이트 및 SHA가 일치했다. 이는 NOR 사용자 영역 백업이며 NAND/OTP나 완전한 복원 시험을 대신하지 않는다.
+2. APPSBLENV는64KiB다. CRC는 헤더4바이트를 제외한65532바이트에 대해 계산했다. 의도한 최종 변경은 원본 대비31바이트이며 모두 첫4KiB `[0xE0000,0xE1000)` 안에 있다.
+3. 첫 수동 기록 뒤 **전원 인가 전 Verify를 확인하지 못했다**. 다음 부팅에서 `bad CRC, using default environment`가 발생했고 `bootdelay=2`로 부팅됐다. 최초 오류의 원인은 미확정이다.
+4. 후속 readback은 CRC가 유효한 기본 환경이었다. 원본과의 차이는 환경 첫4KiB에만 있었다. `uboot_ver` 조건에 따른 자동 환경 저장 코드가 기본 환경의 후속 보존을 설명하지만, 최초 기록 실패 원인까지 입증하지는 않는다.
+5. 17:23 KST, 지정4KiB 섹터 지우기1회와256바이트 페이지 프로그램16회를 실행했다. 섹터/페이지 확인, 전체2MiB readback 비교, 장치를 새로 연 독립3회 읽기가 모두 통과했다. 다른 NOR 영역은 원본과 일치했다.
+6. 17:43 KST 첫 프롬프트를 확인했으나, ESC 되울림 때문에 PC 감지기가 이를 놓쳤다. 감지기를 수정한 뒤 17:50 KST 재시험에서 `(IPQ40xx) #`, 자동 ESC 중단, 키보드 활성화를 확인했다. `version`과 선택한 `printenv` 응답도 확보했다.
 
-외부 롬 라이터(CH341A)를 사용할 수 있는 환경이라면, **부트로더를 교체하거나 위험한 전체 플래싱을 할 필요 없이**, NOR 환경변수 파티션 내의 단 한 항목(`bootdelay`)만 수정함으로써 100% 안전하게 U-Boot 프롬프트를 획득할 수 있습니다.
+| 식별 대상 | SHA256 |
+|---|---|
+| 원본 NOR 2MiB | `c33402801b9c4484b20634303675fe7422b0dcde1e6e1d95c4fac790bea9d23e` |
+| 재기록/검증된 ESC2012 NOR 2MiB | `826c074ace0f52ec7fbcffe0ff6e76ca0365041cb1000e01e5764f85d9d64b78` |
 
-### 3.1. 2MiB NOR 덤프 및 무결성 검증 (2026-10-26 실기 검증 완료)
+‘31바이트 수정’은 파일 차이다. 실제 지우기·기록 단위4KiB와 구분하며 전원·접촉·기록 실패 위험이나 복원 성공을 보장하지 않는다. APPSBL 본체를 교체하지 않았다.
 
-- **장비 구성**: CH341A 프로그래머 + SOP8 테스트 클립 (공유기 전원 및 외부 배선 완전 분리, 3.3V 전압 확인).
-- **AsProgrammer 2.1.2**를 통해 JEDEC ID `C8 40 15` (GD25Q16C) 정상 인식.
-- 3회 연속 독립 덤프 수행: `nor-read1.bin`, `nor-read2.bin`, `nor-read3.bin`.
-  - 각 파일 크기: 정확히 `2,097,152 바이트` (2MiB).
-  - SHA-256 해시 일치: **`c33402801b9c4484b20634303675fe7422b0dcde1e6e1d95c4fac790bea9d23e`**
-  - 3개 파일 간 바이너리 100% 일치 확인으로 완벽한 순정 복원용 원본 백업본 확보 완료.
+## 5. NAND 전체 백업과 순정 UBI
 
-### 3.2. 환경변수(APPSBLENV) 최소 패치(Minimal Patch) 설계 및 오프라인 검증
+U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송했다. geometry와 raw 명령의 단위를 먼저 확인했다.
 
-1. **파티션 테이블 확인**:
-   - NOR `0x40100` MIBIB 파티션 테이블 분석 결과, `0:APPSBLENV` 파티션은 오프셋 **`0x0E0000 ~ 0x0F0000`** (64KiB)에 위치합니다.
-   - 시작점 `0x0E0000`에 4바이트 CRC32 `77ec5d89` 및 18개의 환경변수 문자열이 배치되어 있습니다.
-2. **`bootdelay=2012` 패치**:
-   - `prepare-ti04-uart-env.py` 스크립트를 통해 환경변수 내 `bootdelay=0`을 **`bootdelay=2012`**로 변경.
-   - 전체 64KB 데이터에 대한 CRC32 체크섬을 재계산하여 `5ae6809d`로 갱신.
-3. **변경 범위 검증 (`review.json` 증거)**:
-   - 전체 2MiB 중 오직 첫 번째 4KiB 섹터(`0x0E0000 ~ 0x0E1000`) 내의 **31개 바이트만 변경**됨.
-   - SBL1, MIBIB, QSEE, CDT, APPSBL(부트로더 본체), ART(무선 캘리브레이션) 파티션은 **단 1비트도 건드리지 않고 100% 순정 상태 유지**.
-   - 생성된 4KiB 패치 파일: `candidate-sector-at-e0000-size-1000.bin` (SHA-256: `12abf9e2b7b170812f6e92f55be456f1c5fb5eb0a2f4208a94f057bbade456d2`).
-   - 원본 4KiB 복구 파일: `original-sector-at-e0000-size-1000.bin` (언제든 100% 원상 복구 가능).
-4. **기록 시 주의점**:
-   - AsProgrammer의 기본 "Erase" 버튼은 칩 전체(Chip Erase)를 지우는 명령(`0xC7`)을 실행하므로 절대 사용하면 안 됩니다.
-   - CH341A CLI 도구(`flashrom` 또는 전용 섹터 기록 스크립트)를 이용하여 오직 `0x0E0000` 주소의 4KiB 섹터만 Erase & Write해야 합니다.
-5. **결과**:
-   - 이 패치가 기록되면 부팅 시 `Press ESC to stop autoboot:  1 `이 출력되며, 500ms 동안 시리얼로 ESC 키를 누르면 GPIO 접지나 비밀번호 없이 **즉시 U-Boot 콘솔(`ipq40xx# `)에 진입**하게 됩니다.
+- 일반 `nand read`: ECC 처리 main 데이터.128개 조각, 합계128MiB.
+- `nand read.raw`: 마지막 인자는 바이트 수가 아니라 페이지 수.2048+64바이트 페이지512개는1,081,344바이트다.128개 조각, 합계132MiB.
+- 256개 파일의 offset coverage·크기·중복 없는 manifest·SHA 및 조립 후 재읽기 해시가 모두 통과했다.
+- raw에서 OOB를 제거한 데이터와 ECC main은174바이트 달랐다. UART의 ECC 정정 메시지도 관측했다. 이를 전송 오류나 동일한 복원 형식으로 취급하지 않는다.
+- 이후 Linux에서 읽은 앞32MiB와 뒤96MiB의 SHA도 대응 백업 구간과 일치했다. 조회한 불량 블록 수는0이었다. 실제 NAND 복원은 시행하지 않았다.
 
----
+| 백업 | 바이트 | SHA256 |
+|---|---:|---|
+| ECC main | 134217728 | `06cbcf9d70d48744fb932e5cc031f3bac86ba2648d9d1ee8e5e9682a46ed883f` |
+| raw+OOB | 138412032 | `c3641f0da22d56a28e2aea7805d887bfdd4ccbe6c9ac3199a8834c1765859ba1` |
 
-## 4. 확보된 OpenWrt 펌웨어 파일(`openwrt-kt9200-*.bin`) 분석 및 치명적 주의사항
+순정 앞부분 UBI의 PEB131072 / VID offset2048 / data offset4096 / LEB126976 구조와 두 layout 사본의 CRC를 확인했다. 볼륨은 `kernel`(dynamic23LEB), `ubi_rootfs`(dynamic183LEB)다. 복원한 순정 FIT는 Linux3.14.77 gzip, load/entry `0x80208000`, 기본 configuration `config@ap.dk01.1-c2`였다.
 
-`D:\ai\firmware` 폴더에 위치한 파일들에 대한 분석 결과입니다:
-- `openwrt-kt9200-standard.bin` (10,292,275 바이트)
-- `openwrt-kt9200-high-power.bin` (10,302,515 바이트)
+## 6. 기존 OpenWrt 이미지가 바로 설치되지 않는 이유
 
-### [경고] 2MiB NOR 플래시에 이 파일을 직접 플래싱하면 절대 안 됩니다!
+기존 `openwrt-kt9200-standard.bin`(10,292,275바이트), high-power(10,302,515바이트)는 custom `giga_kt-9200` sysupgrade TAR다. 최초 initramfs·전체 NOR 이미지가 아니다. 이 파일을2MiB NOR에 쓰면 부트 체인이 손상될 수 있으나 ‘언제나 영구 복구 불능’이라고 단정하지 않는다.
 
-1. **이미지 형식 분석**:
-   - 두 파일은 TAR 포맷의 OpenWrt `sysupgrade` 아카이브입니다.
-   - 내부 구성:
-     - `sysupgrade-giga_kt-9200/kernel` (FIT 이미지, 3,218,180 바이트 &asymp; 3.07MB)
-     - `sysupgrade-giga_kt-9200/root` (SquashFS 파일시스템, 7,068,672 바이트 &asymp; 6.74MB)
-     - `CONTROL` (`BOARD=giga_kt-9200`)
-2. **NOR 플래시와의 불일치**:
-   - 파일 크기(~10.3MB)가 보드의 SPI NOR 크기(2MB)의 5배를 초과합니다.
-   - 이 파일에는 퀄컴 부트체인(SBL1, QSEE, APPSBL 등)이 포함되어 있지 않습니다. 만약 CH341A로 이를 NOR에 강제 기록하면 라우터가 전원조차 켜지지 않는 **완전한 벽돌(Hard Brick)**이 됩니다.
-   - 이 커널과 룻에프에스는 **128MiB SPI NAND 플래시의 UBI 볼륨**에 설치되어야 하는 파일입니다.
-3. **배포 영상 및 호환성 한계**:
-   - 배포 영상(N1Kn0bFdptc)은 본 바이너리가 "Pandora boot가 이미 설치된 장비용"이라고 명시하고 있습니다.
-   - 포함된 DTS(`giga_kt-9200.dts`)의 NOR 파티션 맵은 TI04-708H와 일치하지만, 최초 Pandora 부트로더 설치 절차나 팩토리 설치 바이너리는 공개 파일에 포함되어 있지 않습니다.
-   - 따라서 **순정 U-Boot를 유지한 채 U-Boot 콘솔에서 TFTP RAM 부팅을 거쳐 NAND에 설치하는 정공법**을 사용해야 합니다.
+| 제약 | 실제 확인과 대응 |
+|---|---|
+| 기존 FIT에 ramdisk 없음 | kernel+DTB만 포함. 원래 SquashFS root를 그대로 initramfs 인자로 사용할 수 없음. 별도 newc cpio를 구성 |
+| FIT ramdisk `load` 필수 | 순정 U-Boot의 필수 속성 조회를 코드로 확인해 실행 전에 후보 수정. `initrd_high`만으로 대신할 수 없음 |
+| LZMA 미지원 | 실기 `Unimplemented compression type 3`. 해시 검증 후 커널 실행 전에 U-Boot로 복귀 |
+| gzip 출력8MiB 한도 | 코드에서 확인. 압축 해제 kernel12,124,224바이트가 초과하므로 gzip 후보는 전송·CRC만 확인하고 부팅하지 않음 |
+| 순정 bootipq의 config 선택 | `config@5` / `config@ap.dk01.1-c2` 이름을 직접 검색. custom의 `config@1`만으로 영구 부팅을 보장할 수 없음 |
+| NAND 전체128MiB 후보 | RAM에서 읽기 전용 attach 시 후반 PEB의 다른 image sequence로 실패. 앞32MiB와 뒤96MiB로 분리 |
 
----
+해결된 RAM 후보는 **동일 kernel을 비압축 FIT로 포장**하고 명시적 ramdisk load와 검토한 메모리 범위를 사용했다. source/staging `0x84000000`은 순정 bootipq 코드에서도 확인한 주소다. 새 이미지의 크기·kernel 출력·initrd·FDT 범위 검토를 생략하는 공통 주소 예제는 아니다.
 
-## 5. TI04-708H OpenWrt 설치 권장 로드맵 (단계별 가이드)
+## 7. OpenWrt RAM 부팅에서 확인한 것
 
-```mermaid
-flowchart TD
-    A["[1단계] U-Boot 콘솔 확보<br/>(A: 무장비 SW4+SW1 홀드 후 @tnie 입력<br/>B: CH341A로 bootdelay=2012 패치)"] --> B["[2단계] 위험 없는 TFTP RAM 부팅<br/>(openwrt-initramfs-kernel.bin을 RAM 0x84000000에 로드)"]
-    B --> C["[3단계] 순정 파티션 및 캘리브레이션 백업<br/>(RAM 상 OpenWrt에서 ART caldata 및 NAND 전체 백업)"]
-    C --> D["[4단계] NAND에 OpenWrt 영구 설치<br/>(sysupgrade -n openwrt-kt9200-standard.bin 실행)"]
-```
+- 최소 UART 셸: 비압축 FIT 전체 CRC와 payload CRC32/SHA1 검사 후 Linux5.15.150, 4CPU, 256MiB, `/init` ash 응답 확인. 이 후보는 모든 플래시 노드를 비활성화했고 `/proc/mtd`에 장치가 없었다.
+- 전체 사용자 환경: OpenWrt23.05.3/r23809, `rootfs_type=initramfs`, tmpfs 루트, 유선 ping과 HTTP200 응답 확인.
+- 무선: ath10k 펌웨어 및 PHY2개 초기화,2.4/5GHz band 및 pre-cal-nvmem 경로 관측. 라디오는 disabled. 실제 송수신·출력·안정성·WAN 인터넷은 미검증.
+- 연결한 실물 LAN1은 후보 DSA에서 `lan4`/PHY1로 표시됐다. 나머지 실물 포트 전체 매핑은 확인하지 않았으며 네 LAN을 bridge로 묶어 통신했다.
+- 처음 전체128MiB를 읽기 전용 노출한 후보는 UBI attach에 실패했지만 RAM 시스템은 부팅됐다. 이를 설치 또는 데이터 손상 성공/실패와 혼동하지 않는다.
+- 마지막 설치용 RAM 환경은 NOR 전부 및 뒤96MiB를 읽기 전용, 앞32MiB만 `install-target`으로 쓰기 가능하게 노출했다. 이름·offset·크기·flags와 UBI 미attach를 실기로 확인했다.
 
-### [1단계] U-Boot 콘솔 획득
-- **시도 1 (무장비 경로)**:
-  - USB-TTL 어댑터(115200 8N1)를 CN1 (② TX, ③ RX, ④ GND)에 연결.
-  - `SW4 (RESET)`와 `SW1 (FACTORY RESET)` 버튼을 동시에 누른 채 전원을 켜고, 1초 이내에 터미널로 `@tnie\r`를 연속 전송 &rarr; 프롬프트 진입 성공 시 2단계로 직행.
-- **시도 2 (검증된 하드웨어 경로)**:
-  - 위 방법이 안 될 경우, CH341A로 NOR `0x0E0000` 섹터에 `bootdelay=2012` 패치(`candidate-sector-at-e0000-size-1000.bin`) 기록.
-  - 전원 인가 후 터미널에서 `ESC` 키를 눌러 `ipq40xx# ` 프롬프트 진입.
+## 8. 준비한 영구 설치 후보와 현재 중단 지점
 
-### [2단계] 위험 없는 RAM 부팅 검증 (TFTP Initramfs 부팅)
-- 플래시를 영구 덮어쓰기 전에 플래시 훼손 위험이 전혀 없는 RAM 부팅을 먼저 수행합니다.
-- PC 유선 랜을 공유기 LAN 포트에 연결 (PC IP: `192.168.1.100`, TFTP 서버 구동).
-- TFTP 루트 폴더에 IPQ4018 호환 `openwrt-ipq40xx-generic-initramfs-kernel.bin` 배치.
-- U-Boot 콘솔에서 다음 명령 실행:
-  ```sh
-  setenv ipaddr 192.168.1.1
-  setenv serverip 192.168.1.100
-  tftpboot 0x84000000 openwrt-ipq40xx-generic-initramfs-kernel.bin
-  bootm 0x84000000
-  ```
-- RAM 상에서 OpenWrt가 정상 부팅되고 유선 LAN 및 웹 루치(LuCI) 화면이 뜨는지 확인합니다.
+준비된 사설 포트 이미지는 아래와 같다. 원본 보정값이나 장비별 데이터가 포함될 수 있어 **바이너리·전체 로그·개별 환경 값은 공개하지 않는다**. 해시는 보관 파일의 식별값이며 배포 승인이나 설치 성공 인증이 아니다.
 
-### [3단계] 순정 파티션 및 고유 캘리브레이션(ART) 데이터 백업 (필수)
-- RAM으로 부팅된 OpenWrt 쉘(SSH `192.168.1.1`)에서 실행:
-  ```sh
-  cat /proc/mtd
-  # ART 파티션 (각 기기 고유의 Wi-Fi 송신 출력 및 튜닝 값) 추출:
-  dd if=/dev/mtdX of=/tmp/art_backup.bin
-  # 순정 128MB SPI NAND 전체 백업:
-  dd if=/dev/mtdY of=/tmp/nand_full_backup.bin
-  ```
-- PC로 `scp` 또는 TFTP를 통해 백업본을 안전하게 전송 및 보관합니다. (ART 파티션이 소실되면 5GHz Wi-Fi가 켜지지 않거나 출력이 극도로 약해집니다.)
+| 산출물 | 바이트 | SHA256 |
+|---|---:|---|
+| 순정 U-Boot용 비압축 kernel FIT | 12143256 | `1eb48d2b6bcf40fd12adb2162b87e87e073442ef607dede523405918ab19090d` |
+| 준비된 root SquashFS | 7290880 | `1dac6d6d2b64d48a4b5d5e67fafee24959dbbe773ea3951f19247e1906f9d042` |
+| 앞32MiB용 UBI 설치 후보 | 20447232 | `addf531e520fd97481ce4ded91ea1677ec2175bd0d65837d54072d96b931237b` |
 
-### [4단계] 128MB SPI NAND에 OpenWrt 영구 설치
-- RAM 상의 OpenWrt `/tmp` 디렉터리에 `openwrt-kt9200-standard.bin`을 복사합니다.
-- sysupgrade 명령 실행:
-  ```sh
-  sysupgrade -n /tmp/openwrt-kt9200-standard.bin
-  ```
-- 시스템이 NAND의 UBI 볼륨 포맷 및 커널/rootfs 기록을 완료한 후 자동으로 재부팅되면 영구 설치가 완료됩니다.
+후보는 kernel/rootfs/rootfs_data 볼륨, 순정 bootipq용 config 이름,32MiB 설치 경계, NOR 및 뒤96MiB 보호를 포함한다. 기본 LAN DHCP·WAN DHCP·방화벽/NAT를 정리하고 라디오는 껐다. 원래 base_mac의 unicast 유효성 검사가 통과하지 않아 원래 환경은 그대로 두고 Linux용 안정적 locally administered MAC을 구성했다. 이 맞춤 rootfs의 초기 root 암호는 비어 있으므로 실제 설치 후 로컬에서 설정해야 한다.
 
----
+일반 sysupgrade는 원래 LZMA/config/파티션 문제를 다시 만들 수 있어 후보의 platform check가 이를 거절하도록 했다. 최신 공식 TI04 지원 펌웨어를 빌드한 결과가 아니다.
 
-## 6. Remaining Questions & Gaps (남은 의문점 및 향후 과제)
+**NAND 설치 파일 전송 준비 명령이 자동 승인 검토에서 두 차례 `blocked by policy`로 거절됐다.** 구체 사유는 제공되지 않았다. 사용자의 수동 PowerShell 시도는 처음 변수 설정/호출 순서 오류(`BadExpression`)로 실패했고, 변수 없는 한 줄로 정정한 뒤 전송 서버의 LISTEN 상태를 확인했다.
 
-1. **GPIO2의 물리적 회로 매핑 미확정**:
-   - `GPIO63`은 DTS 및 PCB 분석을 통해 `SW4 (RESET)`으로 확인되었으나, `GPIO2`가 전면 버튼(SW1 FACTORY RESET / SW3 WPS) 중 하나인지, 아니면 기판 내부 테스트 포인트/풀업 회로인지 물리적 회로 추적이 완료되지 않았습니다.
-   - 향후 테스터기를 통한 도통 시험(SW1/SW3 누름 시 SoC GPIO2 레지스터 전압 변화 측정)을 우선 진행하면 무장비 진입 가능 여부를 최종 확정할 수 있습니다.
-2. **`bootdelay=2012` 패치의 실제 하드웨어 쓰기 검증**:
-   - 4KiB 패치 바이너리 생성, CRC 재계산, 17개 타 환경변수 보존 및 오프라인 복구 검증은 100% 완료되었으나, 실제 실기 칩에 쓰기 및 ESC 프롬프트 획득 테스트는 아직 실행되지 않았습니다. 사용자 승인 하에 `0x0E0000` 4KB 섹터 플래싱을 수행하여 U-Boot 프롬프트 획득을 최종 실증해야 합니다.
-3. **보드 전용 OpenWrt Initramfs 이미지 빌드**:
-   - 현재 보유한 두 파일은 sysupgrade TAR 파일이므로 2단계 RAM 부팅에 사용할 `initramfs-kernel.bin` 파일이 필요합니다. 공식 OpenWrt 23.05 `ipq40xx/generic` 타깃에서 KT-9200 DTS를 적용한 initramfs 커널 바이너리를 빌드하거나 추출하는 작업이 후속 단계로 필요합니다.
+이 문서 시점에는 **전송 서버 시작까지 확인**했으며 설치용 파일의 공유기 RAM 다운로드 완료나 `ubiformat` 실행을 확인한 상태가 아니다. NAND erase/write, 영구 부팅, 재부팅 후 설정 유지 결과는 없다.
+
+남은 순서: 현재 장비/네트워크/파티션 재확인 → RAM 다운로드와 SHA 대조 → 제한된32MiB 기록 → UBI volume 및 보존 영역 readback → 순정 bootipq로 NAND 부팅 → 두 번째 재부팅·설정 유지·LAN/WAN/무선 검증. **현재 MTD 번호를 다른 부팅 환경에 그대로 복사해 쓰면 안 된다.**
+
+## 근거와 공개 범위
+
+직접 근거는 보존된 NOR/NAND 읽기, 기록 결과 JSON, 선택한 환경 조회, UART RX/TX 감사 기록, FIT/DTB/cpio/UBI 파싱 결과다. 공개 저장소에는 비식별 요약과 식별 해시만 추가했다. 장비별 비밀 값·원본 덤프·세션·사설 이미지·스크린샷의 사용자 경로는 추가하지 않았다.
+
+일반 구조 참고: [U-Boot v2012.07 main.c](https://github.com/u-boot/u-boot/blob/v2012.07/common/main.c), [Linux UBI media header](https://github.com/torvalds/linux/blob/v5.15/drivers/mtd/ubi/ubi-media.h), [OpenWrt v23.05.3 ipq40xx 이미지 정의](https://github.com/openwrt/openwrt/blob/v23.05.3/target/linux/ipq40xx/image/generic.mk). 제조사 바이너리와 실제 실기 결과가 일반 소스보다 구체적인 범위에서는 해당 장비의 증거를 우선했다.

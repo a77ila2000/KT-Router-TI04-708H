@@ -1,25 +1,26 @@
 # 현재 작업 상태 — 2026-10-26 업데이트
 
-> **2026-10-26 검증 완료**: CH341A를 통한 2MiB SPI NOR 실기 3회 연속 덤프 및 해시 일치 검증, U-Boot 2012.07(APPSBL) 역어셈블을 통한 UART autoboot 락 구조 규명, APPSBLENV 4KB 섹터 최소 패치(31바이트) 검증, 그리고 OpenWrt 설치 로드맵 수립을 완료했습니다. 상세 내용은 **[OpenWrt 설치 경로 및 기술 검증 보고서](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)**를 참조하십시오. 기존 미검증 실험 아이디어(3~6절)는 원문 보존합니다.
+> **OpenWrt RAM 부팅 성공, NAND 영구 설치는 아직 미실행입니다.** NOR 환경 패치와 U-Boot 양방향 콘솔, NAND 전체 백업, RAM의 유선 ping/웹 응답 및 무선 PHY2개를 확인했습니다. 기존 문서의 단정과 첫 실패도 실제 기록에 맞춰 수정했습니다. 사용자 요청에 따라 README 3~6절의 실험 아이디어 원문은 보존합니다.
 
-| 항목 | 2026-10-26 실기 검증 및 최종 확인 결과 |
-| --- | --- |
-| **대상 장비** | 올레디오(allRadio) KT GiGA WiFi Wave2 (`TI04-708H` / 보드 모델 `WGHE010100`) |
-| **SPI NOR 실기 확정** | 실장 위치 **U33 (SOP-8)**: GigaDevice **`GD25Q16CSIG`** (2MiB, JEDEC ID `C8 40 15`).<br/>- CH341A 3회 연속 덤프 검증 완료 (SHA-256: `c33402801b9c4484b20634303675fe7422b0dcde1e6e1d95c4fac790bea9d23e`). 순정 원본 백업본 확보. |
-| **SPI NAND** | Macronix `MX35LFxGE4AB` 128MiB SPI NAND (UBI 볼륨에 Linux Kernel FIT + SquashFS Rootfs 저장). |
-| **웹 UI 무장비 설치** | **[불가]** 8899/8801 모두 로컬 펌웨어 업로드 기능 없음. KT 순정은 WAN TR-069(CWMP) 전자서명 푸시 전용. 최고관리자 암호는 기기 고유 해시 기반 동적 생성. |
-| **UART 락 원인 규명** | **[U-Boot APPSBL 역어셈블 완료]** 순정 `bootdelay=0` (Mode 0)은 **`GPIO2 == 0 && GPIO63 == 0` (접지) 및 1초 내 비밀 문자열 `@tnie`** 3중 조건 미충족 시 UART 입력을 검사하지 않고 0초 만에 커널로 직행함. |
-| **무장비 UART 경로** | DTS상 `GPIO63`은 `SW4 (RESET)`임. `SW4`와 `SW1 (FACTORY RESET)`을 동시에 누른 채 전원 인가 후 1초 내 `@tnie\r` 전송 시 진입 가능성 존재 (단, GPIO2 물리 배선 미확정으로 100% 보장 불가). |
-| **NOR 최소 패치 검증** | **[검증 완료]** 2MiB NOR의 `0x0E0000` 환경변수(APPSBLENV) 4KB 섹터에서 `bootdelay=0` &rarr; `bootdelay=2012` (Mode 1: ESC 폴링)로 변경(단 31바이트 수정) 및 CRC32 재계산.<br/>- 전원 인가 후 `ESC` 키 입력만으로 즉시 U-Boot 프롬프트 획득 가능. 부트로더/ART 파티션 100% 보존.<br/>- *주의*: AsProgrammer의 Chip Erase(`0xC7`) 금지, 오직 4KB 섹터만 플래싱 필수. |
-| **OpenWrt 펌웨어 분석** | `openwrt-kt9200-*.bin` (10.3MB)은 128MB SPI NAND용 sysupgrade TAR 아카이브임.<br/>- **[경고] 2MB SPI NOR에 직접 플래싱 시 영구 벽돌(Hard Brick) 발생.** 순정 U-Boot 상에서 TFTP RAM 부팅 후 NAND에 영구 설치해야 함. |
-| **권장 설치 로드맵** | **[1단계]** U-Boot 콘솔 확보 &rarr; **[2단계]** TFTP `openwrt-initramfs-kernel.bin` RAM 부팅 &rarr; **[3단계]** ART(무선 캘리브레이션) 및 순정 NAND 백업 &rarr; **[4단계]** `sysupgrade -n openwrt-kt9200-standard.bin`으로 NAND 영구 설치. |
+| 항목 | 현재까지 확인한 결과 / 한계 |
+|---|---|
+| 대상 | allRadio TI04-708H / WGHE010100. 다른 KT 공급사·보드 절차와 구분 |
+| NOR | U33 GD25Q16CSIG, SOP-8, JEDEC C8 40 15,2MiB. 독립 읽기3회 및 재기록 후 전체 검증 |
+| 환경 패치 | 원본 대비31바이트, 환경 첫4KiB에 한정. 첫 수동 기록은 CRC 오류; 제한된 재기록/전체 readback 후 ESC 콘솔 성공. 부트로더 본체·ART 보존 |
+| UART | `(IPQ40xx) #`와 version/선택 printenv 응답. 도움말·NAND/TFTP 추가 제한은 세션의 `debug_mode=on`으로 해제 |
+| NAND |128MiB, page2048/OOB64/erase131072바이트. ECC main128MiB와 raw+OOB132MiB 백업,256조각 검증 완료. 복원 시험은 미실행 |
+| 설치 범위 | 순정 bootipq rootfs는 **앞32MiB**. 다른 UBI sequence가 있는 뒤96MiB는 보존 대상 |
+| OpenWrt RAM |23.05.3/Linux5.15.150 부팅,4CPU/256MiB/사용자 환경·유선 ping·HTTP200 확인. 두 무선 PHY 초기화; 라디오 disabled, RF 송수신과 WAN 인터넷은 미검증 |
+| 기존 이미지 제약 | sysupgrade TAR이며 최초 initramfs 아님. 순정 U-Boot는 LZMA 미지원, gzip 출력8MiB 한도, 특정 FIT config 이름 요구 |
+| 준비한 설치 후보 | 동일 kernel의 비압축 FIT, 순정 config 이름,32MiB UBI. 파일 생성·오프라인 검증까지 완료; NAND에 아직 기록하지 않음 |
+| 현재 중단 지점 | 자동 승인 검토가 전송 준비 명령을 차단. 사용자 PowerShell 오류 정정 후 수동 전송 서버 LISTEN 확인; 설치 파일 RAM 다운로드 완료·NAND 영구 기록은 아직 확인하지 않음 |
+| 웹·버튼 경로 | 조사 범위에서 미확보.8801 인증 후 메뉴, 암호 생성 규칙, 버튼↔GPIO 매핑은 미확정. ‘72개 모두 실패/업로드 원천 부재’ 단정 철회 |
 
-- **상세 종합 보고서**: **[OPENWRT_INSTALLATION_ANALYSIS_REPORT.md](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)**
-- **후속 인수인계 및 과거 시험 기록**: [docs/HANDOFF.md](docs/HANDOFF.md)
-- 사각 CN1 ①은 약 3.3V 측정만으로 VCC가 확정되지 않는다. ②→어댑터 RX, ③→어댑터 TX, ④→GND 배선에서는 Linux 초기 입력 에코를 관찰했다. VCC·5V 전원선은 미연결로 시험했다.
-- 아래의 환경 패치·핀 글리칭·버튼 복구·공통 TFTP 명령은 검증되지 않은 원래 아이디어였으나, 2026-10-26에 `bootdelay=2012` 4KB 섹터 패치의 오프라인 및 실기 검증이 완료되었다.
-- `CONFIG_AUTOBOOT_KEYED` 대신 역어셈블 분석을 통해 APPSBL 고유의 Mode 0(GPIO2/63 + @tnie) 및 Mode 1(ESC) 락 구조가 밝혀졌다.
-- GD25Q16CSIG 실기 덤프는 3.3V 전압으로 AsProgrammer에서 성공적으로 수행되었으며 1.8V 어댑터는 불필요하다.
+- **종합 결과·정정**: [OpenWrt 진행 보고서](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)
+- **성공·실패·실행 전 중단 이력**: [2026-10-26 실험 기록](docs/EXPERIMENT_LOG_20261026.md)
+- **재개 조건과 과거 조사**: [인수인계](docs/HANDOFF.md)
+- CN1 ①은 미연결. 사용한 ②/③/④ 배선에서 UART 양방향 명령이 확인됐지만, 핀 번호·전압·보드 리비전을 다른 장비에 그대로 적용하지 않습니다.
+- 아래 3~6절의 GPIO/버튼/글리칭/공통 initramfs 제안은 역사적 실험 아이디어입니다. 실제로 실패하거나 수정된 조건은 위 보고서와 실험 기록을 우선합니다. 최소 환경 기록도 ‘100% 안전/완전 복원 보장’으로 해석하지 않습니다.
 
 ### 읽은 파일 검증 도구
 
@@ -121,7 +122,7 @@ graph TD
 | **2.4GHz RF 경로 부품** | RF 블록 상단으로 분류했던 영역 | 정확한 부품번호 미확인 | **미확인** | 2.4GHz RF 경로로 분류한 사진 영역. 부품별 PA/LNA/스위치·제조사·연결은 추가 확인 필요.<br/>- `400Mbps / 256-QAM / 2x2`를 미식별 FEM의 고유 사양으로 단정하지 않음. |
 | **이더넷 트랜스포머** | T1~T3 영역, 개별 번호 대조 필요 | 사진의 `LG2P109N LF` 2개, `LG1P109N LF` 1개 | **실장품 제조사 추가 확인** | 5개 Ethernet 단자의 절연/결합용 자기 부품으로 관찰.<br/>- 기존의 `UB (Bothhand)` 단정은 보류. 실장품의 로고·데이터시트 대조 필요.<br/>- 이 부품은 패킷 스위치 IC가 아니며 내부 포트/핀 배선은 별도 확인 필요. |
 | **클럭 기준 부품** | **Y1** | `48.000 D29F` 마킹 | **미확인** | **48MHz 크리스털 기준 부품으로 추정**.<br/>- 마킹만으로 능동 `Crystal Oscillator` 모듈인지 수동 수정진동자인지 확정하지 않음.<br/>- 정확한 부품번호·전기적 연결·실측 주파수는 추가 확인 필요. |
-| **UART 디버그 헤더** | **CN1** | 4핀 Through-Hole, 사각 패드를 ①로 세는 시험 기준 | - | **시험 설정: 3.3V TTL 수준, 115200 8N1**.<br/>- ①: 약 3.3V 관찰, **VCC 추정이나 미확정·미연결 유지**.<br/>- ②: 보드 TX → 어댑터 RX, 부팅 로그 수신 확인.<br/>- ③: 어댑터 TX → 보드 입력, Linux 초기 에코 근거 확보. U-Boot 처리 확인과는 별개.<br/>- ④: 사용자 확인 GND. 어댑터 VCC/5V는 연결하지 않음. [L] |
+| **UART 디버그 헤더** | **CN1** | 4핀 Through-Hole, 사각 패드를 ①로 세는 시험 기준 | - | **시험 설정: 3.3V TTL 수준, 115200 8N1**.<br/>- ①: 약 3.3V 관찰, **VCC 추정이나 미확정·미연결 유지**.<br/>- ②: 보드 TX → 어댑터 RX, 부팅 로그 수신 확인.<br/>- ③: 어댑터 TX → 보드 입력. Linux 초기 에코에 이어 2026-10-26 U-Boot 및 RAM Linux 명령 응답 확인.<br/>- ④: 사용자 확인 GND. 어댑터 VCC/5V는 연결하지 않음. [L] |
 | **전원 관리** | U10/L25 주변 등, 기능별 위치 재확인 필요 | `2R2`는 인덕터 마킹. 전원 IC의 정확한 P/N은 미확인 | **미확인** | 다중 전원 레일/전원 변환부로 관찰.<br/>- **Silergy/MPS, 동기식 Buck, Core 1.1V 등을 실측 확정값으로 쓰지 않음.**<br/>- 입력 정격은 본체/어댑터 라벨 대조, 각 레일은 회로 확인·측정 필요. RAM 부품의 정격 전압과 보드의 실측값을 구분. |
 | **USB 및 버튼** | **CON1, SW1/SW3/SW4** | USB Type-A, 택트 스위치 | - | **CON1**: USB-A 포트. USB 2.0/3.0 규격·외장 스토리지/모뎀 기능은 이번 시험에서 검증하지 않음.<br/>- 사진의 버튼 표기: **SW1 FACTORY RESET / SW3 WPS / SW4 RESET**.<br/>- 표기 확인과 실제 GPIO·복구 부팅 기능 확인은 별개. |
 
@@ -132,7 +133,7 @@ graph TD
 - **[S]** [Skyworks SKY85405-11 Product Summary](https://www.skyworksinc.com/-/media/B0BE21ADDC38445E93B967915E2A6B3A.pdf): 5GHz PA + 전력 검출기, 20핀 4x4mm QFN. 사진의 완전한 접미사·실장 위치를 추가 대조해야 한다.
 - **[L]** 비공개 원본 `uart-20261021-133347.bin`: NOR/NAND/DRAM과 부팅 단계의 DDR 537MHz 표기, 대응 송신 기록의 실제 에코 관찰. 전체 로그 대신 [인수인계 발췌/설명](docs/HANDOFF.md)을 공개한다.
 
-**아래 3~6절은 기존 실험 아이디어를 보존한 구간이다.** 해당 구간의 초기 가정과 현재 사양이 다르면 위의 수정 사양표와 후속 작업 기록을 기준으로 구분하며, 실험을 실제 시행하기 전에 다시 검토한다.
+**아래 3~6절은 기존 실험 아이디어를 보존한 구간이다.** 해당 구간의 초기 가정과 현재 결과가 다르면 [실험·실패 이력](docs/EXPERIMENT_LOG_20261026.md)과 위의 수정 사양표를 기준으로 구분하며, 실험을 실제 시행하기 전에 다시 검토한다.
 
 ---
 
