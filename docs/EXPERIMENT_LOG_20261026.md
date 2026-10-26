@@ -2,7 +2,7 @@
 
 한국 시간 기준. **성공, 실제 실패, 실행 전 중단, 미검증 가설을 구분한다.** 원본 ROM/NAND·환경의 비밀 값·로그·장비별 이미지·사용자 PC 경로는 비공개로 보관한다.
 
-현재 결론: **NOR 환경 변경과 UART 콘솔, NAND 전체 백업, OpenWrt RAM 부팅은 성공. NAND 영구 설치는 아직 실행하지 않았다.** 기술 설명은 [종합 보고서](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)를 참조한다.
+현재 결론: **OpenWrt NAND 영구 설치, 자동 부팅2회 및 overlay 저장 파일 유지 성공. NOR와 NAND 뒤96MiB 해시 보존.** 첫 NAND 부팅의 root mount 실패와 수정은9절에 기록했다. 기술 설명은 [종합 보고서](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)를 참조한다.
 
 ## 1. 초기 접근 경로
 
@@ -66,7 +66,7 @@
 | devtmpfs mount | 최소 init에서 시도 | `No such device`. /dev/console 준비 후 셸 정상 동작; 전체 환경은 tmpfs /dev 사용 |
 | 전체 rootfs, 모든 MTD 읽기 전용 | procd·module·network 부팅 | **OpenWrt RAM 환경 성공**, 유선 ping/HTTP200, 무선 PHY2개 |
 | 위 환경의 UBI autoattach | 128MiB 전체 읽기 전용 조회 | 후반 PEB384의 다른 image sequence로 attach 실패. RAM 부팅은 계속됨; 플래시 기록 실패가 아님 |
-| 설치용 RAM 환경 | 앞32MiB만 writeable, 나머지 read-only | 정상 부팅 및 경계/flags/UBI 미attach 확인. 아직 NAND 기록 없음 |
+| 설치용 RAM 환경 | 앞32MiB만 writeable, 나머지 read-only | 정상 부팅 및 경계/flags/UBI 미attach 확인 후9절의 NAND 기록 진행 |
 
 후보를 생성한 사실, RAM 전송 완료, 부트로더 해시 검증, kernel 실행, 사용자 환경 부팅, NAND 영구 설치를 각각 별개의 상태로 기록했다.
 
@@ -83,7 +83,7 @@
 2. 사용자의 재진행 요청 후 현재 유선 대역에 맞춘 명령도 동일하게 거절됐다. 사용자의 설치 의사와 별개의 실행 도구 제한이며 다른 도구로 우회하지 않았다.
 3. 사용자 PowerShell에서 호출 줄이 변수 설정보다 먼저 입력돼 `BadExpression`이 발생했다. 이 시도에서는 서버가 시작되지 않았다.
 4. 변수 없는 한 줄 명령으로 정정 후 사용자가 직접 실행했고, 지정 포트 LISTEN 상태를 확인했다. 대기 중인 서버 창은 종료하지 않도록 안내했다.
-5. **문서 갱신 시점에는 서버 시작까지 확인했다. 설치용 파일의 공유기 RAM 다운로드 완료 및 NAND 영구 기록은 미확인/미실행이다.**
+5. 이전 문서 발행 시점에는 서버 시작까지 확인했고, 이후 다운로드·NAND 기록 및 후속 수정은9절처럼 진행했다. 수정 kernel 전송 서버도 자동 실행이 거절돼 사용자가 직접 시작했다.
 
 ## 8. 기존 문서의 단정 수정
 
@@ -93,6 +93,24 @@
 - 공통 initramfs 파일 이름/주소만으로 부팅할 수 있다는 안내와 기존 sysupgrade 즉시 설치 경로를 실기 제약으로 대체했다.
 - README 3~6절의 원래 실험 제안은 사용자 요청대로 원문을 보존했다. 현재 상태 설명과 분리하고 이 정정 기록을 연결했다.
 
-## 남은 완료 조건
+## 9. NAND 기록·첫 부팅 실패·수정 완료
 
-설치 후보 다운로드와 SHA 확인 → 현재 경계/장치 재확인 → 제한된32MiB 기록 → volume 및 NOR/후반96MiB readback → 순정 bootipq NAND 부팅 → 두 번째 재부팅/overlay·설정 유지 → LAN DHCP/관리 UI·WAN·무선 검증. 각 단계의 실제 결과가 생기기 전 성공으로 표시하지 않는다.
+| 순서 / 시도 | 실제 결과 | 판정 |
+|---|---|---|
+| 최초 긴 UART guard 명령 | 전송 누락·셸 continuation, guard 시간 초과 | NAND 기록 전에 중단. 짧은 줄과16바이트/20ms 간격으로 수정 |
+| base64로 guard 전송 | 장비에 base64 applet 없음, RC127 | NAND 기록 전 중단. 리터럴 줄 전송과 guard SHA 검사로 변경 |
+| 약19:44~19:46 앞32MiB 기록 | 파일 SHA·경계 검사 후 ubiformat, kernel/rootfs readback 및 NOR/뒤96MiB 해시 통과 | NAND 기록 자체는 성공 |
+| 첫 NAND 부팅 | kernel/config@5/해시 통과 후 `mtd:ubi_rootfs: Can't open blockdev`, root mount panic | 영구 부팅 실패. ESC로 U-Boot 회수, NOR 추가 수정 없음 |
+| 원인 분석 | bootipq의 `ubi.mtd=rootfs root=mtd:ubi_rootfs`가 처음 DTB의 `ubi` 이름 및 ubiblock 경로와 불일치 | DTB 기본 bootargs만 수정해서는 덮어쓰기 해결 불가 |
+| 수정 kernel RAM 시험 | 파티션 이름 rootfs + bootargs-append의 ubiblock root, 순정과 같은 legacy 인자를 주입해 시험 | NAND SquashFS/UBIFS overlay 부팅 성공 |
+| 첫 수정 파일 다운로드 | `Failed to send request: Operation not permitted`, RAM 파일 없음 | 쓰기 실행 없음. 원인 단정하지 않음. 사용자 서버와 유선 상태 재확인 후 재전송 성공 |
+| 약20:23 kernel 볼륨만 갱신 | 수정 FIT12,143,380바이트/SHA 일치 후 ubiupdatevol, kernel readback과 rootfs 불변 확인 | 최종 kernel 기록 성공 |
+| 약20:24~20:26 자동 부팅2회 | NAND kernel/config@5, /rom SquashFS 및 /overlay UBIFS, 저장 파일 유지 | ESC 송신0, TFTP 없는 소프트웨어 재부팅 성공. 물리 전원 재인가는 미시험 |
+| 최종 보존 검사 | NOR8개 파티션과 뒤96MiB SHA 모두 설치 전과 일치 | 보존 범위 불변 |
+| 최종 유선 관리 | LAN up, PC ping, LuCI 로그인 HTML | HTTP403 + login-required 헤더는 로그인 요구. DHCP 활성·dnsmasq 실행 확인, 실제 임대 미시험 |
+
+최종 kernel SHA256은 `005b1808fc0c365c3bf1a86cf4e4cacd667f01f9f38366cc426f0b6e188df277`이다. 최초 `addf531e…` UBI에는 수정 전 kernel이 들어 있어 **최종 설치 이미지로 단독 재사용하면 안 된다**. 초기 root 암호는 로컬에서 설정해야 하며, 일반 sysupgrade는 기존 제약 때문에 차단한다.
+
+## 남은 시험
+
+물리 전원 차단/재인가, 실제 DHCP 임대, WAN 인터넷, 무선 송수신·출력, 나머지 포트 매핑 및 장기 안정성. 무선은 disabled 상태를 유지했다. 설치·두 번의 자동 부팅·overlay 파일 유지와 이 미시험 기능을 구분한다.

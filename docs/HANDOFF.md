@@ -4,16 +4,17 @@
 
 ## 0. 최신 상태와 다음 작업
 
-**완료:** NOR 환경4KiB 재기록과 전체 readback, ESC U-Boot 콘솔, debug_mode 세션 제한 해제, NAND 전체 백업, OpenWrt RAM 부팅과 유선 통신/웹 응답.
+**완료:** NOR 환경4KiB 재기록과 전체 readback, ESC U-Boot 콘솔, NAND 전체 백업, OpenWrt NAND 영구 설치와 자동 부팅2회, overlay 저장 파일 유지, NOR 및 NAND 뒤96MiB 해시 보존, 유선 ping/LuCI 로그인 화면.
 
-**미완료:** OpenWrt의 NAND 영구 기록, NAND로부터 부팅, 재부팅 후 overlay·설정 유지, WAN 인터넷 및 실제 무선 송수신.
+**미검증:** 물리 전원 차단/재인가, 실제 DHCP 클라이언트 임대, WAN 인터넷, RF 송수신·출력 및 장기 안정성.
 
 - [종합 보고서](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)에 GPIO·웹 로그인·압축·FIT·파티션 단정을 수정했습니다.
 - [실험·실패 이력](EXPERIMENT_LOG_20261026.md)에 첫 CRC 실패, PC 수신기 종료/프롬프트 감지 버그, TFTP 초기 실패, LZMA 부팅 실패, 실행 전 중단과 도구 차단을 구분했습니다.
-- 마지막 실기 환경은 **설치용 initramfs/tmpfs**입니다. MTD 이름과 시작·크기·flags를 다시 확인해야 하며, 과거 숫자를 그대로 사용하면 안 됩니다.
-- 마지막 관측: NOR 전부 read-only; 뒤96MiB `stock-reserved` read-only; 앞32MiB `install-target`만 writeable; UBI 미attach. 사용자 수동 전송 서버의 LISTEN까지 확인했습니다.
-- 설치 후보 UBI는20,447,232바이트, SHA256 `addf531e520fd97481ce4ded91ea1677ec2175bd0d65837d54072d96b931237b`. 바이너리·원본 로그·장비별 데이터는 로컬 비공개 보관입니다.
-- 다음 순서: RAM 다운로드/동일 SHA 확인 → 현재32MiB 경계 재검증 → 제한된 NAND 기록 → volume 및 NOR/뒤96MiB readback → 순정 bootipq NAND 부팅 → 두 번째 재부팅과 설정 유지 검증. **현재 기록 실행 사실은 없습니다.**
+- 마지막 실기 환경은 **NAND kernel + SquashFS /rom + UBIFS /overlay**입니다. 순정 bootipq의 `config@5` 선택으로 자동 부팅2회, ESC 송신0/TFTP 없음, 저장 파일 유지를 확인했습니다. 재개 시 MTD 이름·경계·flags를 다시 확인합니다.
+- 현재 DTB에서 NOR 전부와 뒤96MiB `stock-reserved`는 read-only, 앞32MiB `rootfs`에 UBI가 attach돼 있습니다. 설치 때의 `install-target` 이름과 현재 이름을 혼동하면 안 됩니다.
+- 최초 UBI는20,447,232바이트, SHA256 `addf531e520fd97481ce4ded91ea1677ec2175bd0d65837d54072d96b931237b`입니다. **수정 전 kernel이 들어 있어 최종 복구 이미지로 단독 재사용하면 안 됩니다.** 최종 kernel FIT는12,143,380바이트, SHA256 `005b1808fc0c365c3bf1a86cf4e4cacd667f01f9f38366cc426f0b6e188df277`이며 kernel 볼륨만 추가 갱신·검증했습니다. 바이너리·원본 로그·장비별 데이터는 비공개 보관입니다.
+- 첫 NAND 부팅은 root 인자 불일치로 panic했습니다. DTB의 파티션 이름 `rootfs` 및 `bootargs-append`의 ubiblock root로 해결했습니다. 상세 실패·수정 근거는 종합 보고서8절과 실험 기록9절을 확인합니다.
+- 다음 작업은 로컬 root 암호 설정과 필요 기능 검증입니다. DHCP 활성·dnsmasq 실행은 확인했지만 실제 임대는 미시험이고, 두 라디오는 disabled입니다. 관리 화면은 LuCI 로그인 HTML로 응답합니다. 일반 sysupgrade를 재사용하지 않습니다.
 - 원래 sysupgrade TAR를 재사용하면 LZMA/보드 config/128MiB 범위 문제가 재발할 수 있습니다. 준비된 후보는 순정 U-Boot용 비압축 FIT와 config 이름 및32MiB 경계가 반영된 별도 이미지입니다.
 - 일반 웹 UI와8801에 대해 업로드 기능 부재나 원격 관리 전용을 단정하지 않습니다. 로그인 시험은 재개하지 않습니다.
 
@@ -149,6 +150,6 @@ Windows에 Ghidra가 설치되어 있거나 REA MCP가 연결되어 있어도 ra
 | 추가 제한 | debug_mode 값이 on일 때 제한 명령 동작. 세션에만 적용하고 환경 저장하지 않음 |
 | NAND |128MiB ECC main +132MiB raw/OOB 백업 및256조각 검증. 순정 rootfs32MiB 경계 확인, 후반96MiB 보존 대상 |
 | RAM OpenWrt | 비압축 kernel/FIT와 별도 initramfs로 부팅. LAN ping/HTTP200 및 PHY2개 초기화. RF/WAN은 미검증 |
-| 영구 설치 | 파일 생성·검증까지만 완료. 자동 승인 검토에서 전송 준비 명령이 차단됐고, 이후 사용자가 수동 서버를 시작함. NAND 기록은 아직 미실행 |
+| 영구 설치 | 앞32MiB 기록/readback 후 첫 root mount panic을 DTB로 수정. kernel 볼륨 재기록/readback, NAND 자동 부팅2회 및 overlay 저장 파일 유지 확인. NOR/뒤96MiB 해시 불변 |
 
 원본 NOR 대비31바이트 수정, 실제4KiB 기록 단위, 기록 직전 기본 환경 대비248바이트 차이를 구분합니다. 해시 일치는 읽기/파일 무결성의 근거이며 무위험·언제든 완전 복원 가능성을 보장하지 않습니다. GPIO63=SW4 및 ‘1초 내 문자열’ 단정은 정정했고 버튼 조합 시험에서는 프롬프트를 확인하지 못했습니다.

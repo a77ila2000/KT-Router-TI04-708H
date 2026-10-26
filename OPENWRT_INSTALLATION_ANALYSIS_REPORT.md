@@ -2,7 +2,7 @@
 
 기록 기준: **2026-10-26, 한국 시간**. 사용자 소유 allRadio TI04-708H 한 대에서 확인한 결과다. 초기 검토 문서의 단정과 이후 실기 결과를 구분해 갱신했다.
 
-**현재 완료: NOR 환경 패치, U-Boot 양방향 콘솔, NAND 전체 백업, OpenWrt RAM 부팅 및 유선 통신. 아직 미완료: NAND에 OpenWrt 영구 기록, NAND 부팅, 재부팅 후 설정 유지, WAN 인터넷 및 무선 송수신 시험.**
+**현재 완료: NOR 환경 패치, U-Boot 양방향 콘솔, NAND 전체 백업, OpenWrt NAND 영구 설치, ESC/TFTP 없는 자동 부팅2회 및 overlay 저장 파일 유지. NOR 전체와 NAND 뒤96MiB의 해시 보존 및 유선 ping/LuCI 로그인 화면 확인. 미검증: 물리 전원 재인가, DHCP 클라이언트 임대, WAN 인터넷, 실제 무선 송수신·장기 안정성.**
 
 - 시행 순서와 실패 원인: [실험·실패 이력](docs/EXPERIMENT_LOG_20261026.md).
 - 다음 작업과 과거 조사: [인수인계](docs/HANDOFF.md).
@@ -123,17 +123,18 @@ U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송
 - 무선: ath10k 펌웨어 및 PHY2개 초기화,2.4/5GHz band 및 pre-cal-nvmem 경로 관측. 라디오는 disabled. 실제 송수신·출력·안정성·WAN 인터넷은 미검증.
 - 연결한 실물 LAN1은 후보 DSA에서 `lan4`/PHY1로 표시됐다. 나머지 실물 포트 전체 매핑은 확인하지 않았으며 네 LAN을 bridge로 묶어 통신했다.
 - 처음 전체128MiB를 읽기 전용 노출한 후보는 UBI attach에 실패했지만 RAM 시스템은 부팅됐다. 이를 설치 또는 데이터 손상 성공/실패와 혼동하지 않는다.
-- 마지막 설치용 RAM 환경은 NOR 전부 및 뒤96MiB를 읽기 전용, 앞32MiB만 `install-target`으로 쓰기 가능하게 노출했다. 이름·offset·크기·flags와 UBI 미attach를 실기로 확인했다.
+- 최초 기록에 사용한 설치용 RAM 환경은 NOR 전부 및 뒤96MiB를 읽기 전용, 앞32MiB만 `install-target`으로 쓰기 가능하게 노출했다. 이름·offset·크기·flags와 UBI 미attach를 실기로 확인한 후8절의 설치를 진행했다.
 
-## 8. 준비한 영구 설치 후보와 현재 중단 지점
+## 8. NAND 영구 설치와 첫 부팅 실패 수정
 
 준비된 사설 포트 이미지는 아래와 같다. 원본 보정값이나 장비별 데이터가 포함될 수 있어 **바이너리·전체 로그·개별 환경 값은 공개하지 않는다**. 해시는 보관 파일의 식별값이며 배포 승인이나 설치 성공 인증이 아니다.
 
 | 산출물 | 바이트 | SHA256 |
 |---|---:|---|
-| 순정 U-Boot용 비압축 kernel FIT | 12143256 | `1eb48d2b6bcf40fd12adb2162b87e87e073442ef607dede523405918ab19090d` |
+| 최초 기록 kernel FIT — root mount 실패, 아래 수정 필요 | 12143256 | `1eb48d2b6bcf40fd12adb2162b87e87e073442ef607dede523405918ab19090d` |
+| 최종 기록 kernel FIT — DTB root 인자 수정 | 12143380 | `005b1808fc0c365c3bf1a86cf4e4cacd667f01f9f38366cc426f0b6e188df277` |
 | 준비된 root SquashFS | 7290880 | `1dac6d6d2b64d48a4b5d5e67fafee24959dbbe773ea3951f19247e1906f9d042` |
-| 앞32MiB용 UBI 설치 후보 | 20447232 | `addf531e520fd97481ce4ded91ea1677ec2175bd0d65837d54072d96b931237b` |
+| 최초 기록 UBI — 수정 전 kernel 포함, 최종 이미지 아님 | 20447232 | `addf531e520fd97481ce4ded91ea1677ec2175bd0d65837d54072d96b931237b` |
 
 후보는 kernel/rootfs/rootfs_data 볼륨, 순정 bootipq용 config 이름,32MiB 설치 경계, NOR 및 뒤96MiB 보호를 포함한다. 기본 LAN DHCP·WAN DHCP·방화벽/NAT를 정리하고 라디오는 껐다. 원래 base_mac의 unicast 유효성 검사가 통과하지 않아 원래 환경은 그대로 두고 Linux용 안정적 locally administered MAC을 구성했다. 이 맞춤 rootfs의 초기 root 암호는 비어 있으므로 실제 설치 후 로컬에서 설정해야 한다.
 
@@ -141,9 +142,27 @@ U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송
 
 **NAND 설치 파일 전송 준비 명령이 자동 승인 검토에서 두 차례 `blocked by policy`로 거절됐다.** 구체 사유는 제공되지 않았다. 사용자의 수동 PowerShell 시도는 처음 변수 설정/호출 순서 오류(`BadExpression`)로 실패했고, 변수 없는 한 줄로 정정한 뒤 전송 서버의 LISTEN 상태를 확인했다.
 
-이 문서 시점에는 **전송 서버 시작까지 확인**했으며 설치용 파일의 공유기 RAM 다운로드 완료나 `ubiformat` 실행을 확인한 상태가 아니다. NAND erase/write, 영구 부팅, 재부팅 후 설정 유지 결과는 없다.
+### 실제 기록과 실패
 
-남은 순서: 현재 장비/네트워크/파티션 재확인 → RAM 다운로드와 SHA 대조 → 제한된32MiB 기록 → UBI volume 및 보존 영역 readback → 순정 bootipq로 NAND 부팅 → 두 번째 재부팅·설정 유지·LAN/WAN/무선 검증. **현재 MTD 번호를 다른 부팅 환경에 그대로 복사해 쓰면 안 된다.**
+- 설치 파일 RAM 다운로드와 SHA 확인 후, 앞32MiB만 `ubiformat`했다. kernel/rootfs readback SHA 일치, NOR8개 파티션 및 뒤96MiB SHA 불변을 확인했다.
+- 첫 긴 UART 명령은 수신 누락/셸 continuation으로 실행 전 guard가 실패했다. 이어진 전송 방식은 `base64` applet 부재로 중단됐다. 두 번 모두 NAND 기록 전 중단이다. 짧은 리터럴 줄·16바이트 단위 송신 간격·전송한 guard 자체의 SHA 검사로 수정한 뒤 기록했다.
+- **첫 NAND 부팅은 kernel 로딩·해시·config@5 선택까지 성공했지만 root mount에서 panic했다.** 순정 bootipq가 `ubi.mtd=rootfs root=mtd:ubi_rootfs rootfstype=squashfs`를 넣어, 처음 DTB의 파티션 이름 `ubi`와 현대 ubiblock 경로가 맞지 않았다. U-Boot 콘솔로 복귀했으며 이를 설치 완료로 표시하지 않았다.
+- 수정 DTB는 앞32MiB 파티션 이름을 `rootfs`로 맞추고 `/chosen/bootargs-append`로 ` root=/dev/ubiblock0_1 rootfstype=squashfs console=ttyMSM0,115200 loglevel=6`을 붙였다. bootargs 기본값만 바꾸는 것으로는 bootipq 덮어쓰기를 해결하지 못한다. OpenWrt 해당 커널의 append 처리를 확인했고, 동일한 순정 root 인자를 주입한 RAM kernel에서 NAND root/overlay 부팅을 먼저 검증했다.
+- 수정 FIT를 RAM으로 다시 전송하고 크기/SHA 확인 후 **UBI kernel 볼륨만** 갱신했다. 최종 kernel readback은 `005b1808…df277`, rootfs는 위 `1dac6d6d…9d042`와 일치했다. rootfs/overlay를 재포맷하거나 NOR를 추가 수정하지 않았다.
+
+### 최종 실기 판정
+
+| 검증 | 실제 결과 |
+|---|---|
+| 순정 bootipq 자동 부팅 | kernel 볼륨을 NAND에서 읽고 `config@5`, CRC32/SHA1 통과 후 부팅2회. 각 재부팅에서 자동 ESC 송신0, TFTP 없음 |
+| root/overlay | UBI가 앞32MiB에 attach, `/dev/root /rom squashfs ro`와 `/dev/ubi0_2 /overlay ubifs rw`, overlayfs 루트 확인 |
+| 저장 유지 | overlay의 확인용 파일이 두 차례 소프트웨어 재부팅 후 같은 내용으로 유지 |
+| 보존 범위 | NAND 뒤96MiB 및 NOR8개 파티션 모두 설치 전 SHA와 일치 |
+| 유선 관리 | LAN bridge up, PC ping 응답, LuCI 로그인 HTML 확인. 로그인 페이지의 HTTP403 + `x-luci-login-required: yes`는 로그인 요구 응답 |
+| DHCP/무선 | DHCP 활성·dnsmasq 실행 확인. 클라이언트 임대는 미시험. 두 라디오는 disabled 유지 |
+| 남은 시험 | 물리 전원 차단/재인가, WAN 인터넷, RF 송수신·출력, 나머지 포트 매핑, 장기 안정성 |
+
+이 결과는 해당 한 대의 OpenWrt23.05.3 맞춤 포트 설치 검증이다. 일반 sysupgrade나 모든 TI04 리비전 지원을 뜻하지 않는다. **현재 MTD 번호를 다른 부팅 환경에 그대로 복사해 쓰면 안 된다.** 최초 UBI에는 수정 전 kernel이 들어 있으므로, 그 파일 하나를 다시 기록하면 root mount 실패가 재현될 수 있다.
 
 ## 근거와 공개 범위
 

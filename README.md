@@ -1,6 +1,6 @@
 # 현재 작업 상태 — 2026-10-26 업데이트
 
-> **OpenWrt RAM 부팅 성공, NAND 영구 설치는 아직 미실행입니다.** NOR 환경 패치와 U-Boot 양방향 콘솔, NAND 전체 백업, RAM의 유선 ping/웹 응답 및 무선 PHY2개를 확인했습니다. 기존 문서의 단정과 첫 실패도 실제 기록에 맞춰 수정했습니다. 사용자 요청에 따라 README 3~6절의 실험 아이디어 원문은 보존합니다.
+> **OpenWrt NAND 영구 설치와 두 차례 자동 부팅에 성공했습니다.** 순정 U-Boot에서 ESC/TFTP 없이 NAND 커널·SquashFS·UBIFS overlay가 올라오고, 저장 파일이 재부팅 후 유지됐습니다. NOR 전체와 NAND 뒤96MiB의 해시는 설치 전과 같습니다. 첫 NAND 부팅의 root 인자 오류와 수정 과정도 기록했습니다. 사용자 요청에 따라 README 3~6절의 실험 아이디어 원문은 보존합니다.
 
 | 항목 | 현재까지 확인한 결과 / 한계 |
 |---|---|
@@ -12,13 +12,15 @@
 | 설치 범위 | 순정 bootipq rootfs는 **앞32MiB**. 다른 UBI sequence가 있는 뒤96MiB는 보존 대상 |
 | OpenWrt RAM |23.05.3/Linux5.15.150 부팅,4CPU/256MiB/사용자 환경·유선 ping·HTTP200 확인. 두 무선 PHY 초기화; 라디오 disabled, RF 송수신과 WAN 인터넷은 미검증 |
 | 기존 이미지 제약 | sysupgrade TAR이며 최초 initramfs 아님. 순정 U-Boot는 LZMA 미지원, gzip 출력8MiB 한도, 특정 FIT config 이름 요구 |
-| 준비한 설치 후보 | 동일 kernel의 비압축 FIT, 순정 config 이름,32MiB UBI. 파일 생성·오프라인 검증까지 완료; NAND에 아직 기록하지 않음 |
-| 현재 중단 지점 | 자동 승인 검토가 전송 준비 명령을 차단. 사용자 PowerShell 오류 정정 후 수동 전송 서버 LISTEN 확인; 설치 파일 RAM 다운로드 완료·NAND 영구 기록은 아직 확인하지 않음 |
+| NAND 설치 | 앞32MiB에 kernel/rootfs/rootfs_data 기록과 readback 완료. 첫 부팅의 root mount 실패 후 DTB를 수정하고 kernel 볼륨만 재기록·검증 |
+| 자동 부팅·저장 유지 | 순정 bootipq의 `config@5` 선택으로 NAND 부팅2회, ESC 송신0. SquashFS /rom + UBIFS /overlay 및 저장 파일 유지 확인. 물리 전원 차단/재인가 시험은 별도 |
+| 관리·남은 검증 | 유선 ping 및 LuCI 로그인 화면 확인. DHCP 활성·dnsmasq 실행, 실제 클라이언트 임대는 미시험. 라디오 disabled, WAN/RF·장기 안정성 미검증 |
 | 웹·버튼 경로 | 조사 범위에서 미확보.8801 인증 후 메뉴, 암호 생성 규칙, 버튼↔GPIO 매핑은 미확정. ‘72개 모두 실패/업로드 원천 부재’ 단정 철회 |
 
 - **종합 결과·정정**: [OpenWrt 진행 보고서](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)
 - **성공·실패·실행 전 중단 이력**: [2026-10-26 실험 기록](docs/EXPERIMENT_LOG_20261026.md)
 - **재개 조건과 과거 조사**: [인수인계](docs/HANDOFF.md)
+- 설치한 것은 OpenWrt23.05.3/Linux5.15.150 기반 맞춤 포트다. 초기 root 암호는 비어 있으므로 로컬에서 설정한다. 일반 sysupgrade는 기존 LZMA/config/파티션 제약 때문에 차단하며, 최초 기록했던 UBI는 root 인자 수정 전의 역사적 산출물이다.
 - CN1 ①은 미연결. 사용한 ②/③/④ 배선에서 UART 양방향 명령이 확인됐지만, 핀 번호·전압·보드 리비전을 다른 장비에 그대로 적용하지 않습니다.
 - 아래 3~6절의 GPIO/버튼/글리칭/공통 initramfs 제안은 역사적 실험 아이디어입니다. 실제로 실패하거나 수정된 조건은 위 보고서와 실험 기록을 우선합니다. 최소 환경 기록도 ‘100% 안전/완전 복원 보장’으로 해석하지 않습니다.
 
@@ -117,7 +119,7 @@ graph TD
 | **메인 SoC** | **U16** | 사진의 `IPQ4018` 마킹 | Qualcomm | **4코어 ARM Cortex-A7, 제조사 명시 최대 717MHz** — 716.8MHz 고정 실측값이라는 뜻은 아님.<br/>- 2.4GHz 802.11n / 5GHz 802.11ac 계열 듀얼밴드, 2x2 구성. 802.11ac를 2.4GHz 규격으로 표기하지 않음.<br/>- 제조사 사양은 Ethernet 5포트 지원. 보드의 PHY/스위치 세부 배선은 별도 확인 필요.<br/>- `ipq40xx/generic`은 플랫폼 타깃이며 TI04 보드 공식 지원·최초 설치 이미지 검증과 별개. [Q] |
 | **시스템 RAM** | **U15** | `NT5CC128M16JR-EK` | NANYA | **2Gbit = 256MiB DDR3L SDRAM**, 128M x16, **96-ball BGA**. 이 구성/패키지는 기존 표가 맞음.<br/>- **DDR3L-1866 등급(1866Mb/s per pin, 1866MT/s)**은 부품 등급이지 보드의 동작 주파수가 아님.<br/>- 실기 부팅 로그 표기는 `DDR Frequency, 537 MHz`. 실행 중 모든 시점의 주파수·보드 전압을 실측한 것은 아님.<br/>- LuCI/SQM/WireGuard 성능·수용량은 별도 부하 시험 전에는 보장하지 않음. [N][L] |
 | **SPI NOR 플래시** | **U33 (SOP-8)** | `GD25Q16CSIG` (JEDEC ID `C8 40 15`) | GigaDevice | **2MiB (16Mbit) SPI NOR**.<br/>- 2026-10-26 CH341A 3회 연속 덤프 검증 완료 (SHA-256 일치: `c3340280...`).<br/>- `0x0E0000` APPSBLENV (환경변수), `0x100000` APPSBL (U-Boot 2012.07), `0x1F0000` ART 파티션 탑재. [L] |
-| **SPI NAND 플래시** | **실장 번호·패키지 미확인** | 로그의 `MX35LFxGE4AB`, 128MiB — 실물 전체 표기 확인 필요 | Macronix | **128MiB (1Gbit) SPI NAND**, 로그의 페이지 크기 2KiB.<br/>- NOR와 별개이며 ECC/OOB·배드블록·백업 형식을 구분해야 함.<br/>- 커널/루트·ART 등의 실제 저장 위치는 순정 영역 분석 전 미확정. [L] |
+| **SPI NAND 플래시** | **실장 번호·패키지 미확인** | 로그의 `MX35LFxGE4AB`, 128MiB — 실물 전체 표기 확인 필요 | Macronix | **128MiB (1Gbit) SPI NAND**, 로그의 페이지 크기 2KiB.<br/>- NOR와 별개이며 ECC/OOB·배드블록·백업 형식을 구분해야 함.<br/>- 순정 bootipq는 앞32MiB의 UBI를 사용. 현재 kernel/rootfs/rootfs_data를 이 범위에 설치했고 뒤96MiB는 보존했다. ART는 위 NOR의 별도 영역. [L] |
 | **5GHz RF PA** | RF 블록 하단, 실장 번호 재확인 필요 | 사진의 `SKY85405` 마킹. 자료 대조 대상 `SKY85405-11`, 실물 접미사는 미확정 | Skyworks | **5GHz 802.11ac용 PA + 전력 검출기**.<br/>- **PA+LNA+SPDT 통합 FEM이라는 기존 설명은 잘못됨.** 자료의 블록도는 PA·정합·검출기 구성.<br/>- 채널 폭·MU-MIMO는 SoC/무선 시스템 기능이며 이 PA 자체의 기능처럼 적지 않음. [S] |
 | **2.4GHz RF 경로 부품** | RF 블록 상단으로 분류했던 영역 | 정확한 부품번호 미확인 | **미확인** | 2.4GHz RF 경로로 분류한 사진 영역. 부품별 PA/LNA/스위치·제조사·연결은 추가 확인 필요.<br/>- `400Mbps / 256-QAM / 2x2`를 미식별 FEM의 고유 사양으로 단정하지 않음. |
 | **이더넷 트랜스포머** | T1~T3 영역, 개별 번호 대조 필요 | 사진의 `LG2P109N LF` 2개, `LG1P109N LF` 1개 | **실장품 제조사 추가 확인** | 5개 Ethernet 단자의 절연/결합용 자기 부품으로 관찰.<br/>- 기존의 `UB (Bothhand)` 단정은 보류. 실장품의 로고·데이터시트 대조 필요.<br/>- 이 부품은 패킷 스위치 IC가 아니며 내부 포트/핀 배선은 별도 확인 필요. |
