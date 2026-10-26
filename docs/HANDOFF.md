@@ -8,6 +8,8 @@
 
 **미검증:** 물리 전원 차단/재인가, 실제 DHCP 클라이언트 임대, WAN 인터넷, RF 송수신·출력 및 장기 안정성.
 
+후속 [25.12.6 RAM 시험](OPENWRT_25_12_6_RAM_TEST_20261026.md)에서 최신 kernel6.12.112 부팅과 QCA8075 드라이버 수정, 유선1Gbps·실제 DHCP 임대·LuCI·무선 PHY2개 초기화를 확인했습니다. 이 DHCP 결과는25.12.6 RAM 환경의 결과이며 위23.05.3 설치 검증과 구분합니다. 노출된10개 플래시 파티션 SHA 보존 후 NAND23.05.3으로 복귀했습니다. 25.12.6 영구 설치는 아직 없습니다. 새 kernel이 기존96 LEB kernel 볼륨보다 커 앞32MiB UBI 재구성이 필요합니다.
+
 - [종합 보고서](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)에 GPIO·웹 로그인·압축·FIT·파티션 단정을 수정했습니다.
 - [실험·실패 이력](EXPERIMENT_LOG_20261026.md)에 첫 CRC 실패, PC 수신기 종료/프롬프트 감지 버그, TFTP 초기 실패, LZMA 부팅 실패, 실행 전 중단과 도구 차단을 구분했습니다.
 - 마지막 실기 환경은 **NAND kernel + SquashFS /rom + UBIFS /overlay**입니다. 순정 bootipq의 `config@5` 선택으로 자동 부팅2회, ESC 송신0/TFTP 없음, 저장 파일 유지를 확인했습니다. 재개 시 MTD 이름·경계·flags를 다시 확인합니다.
