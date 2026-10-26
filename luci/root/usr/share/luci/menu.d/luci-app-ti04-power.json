@@ -1,0 +1,14 @@
+{
+	"admin/network/ti04-power": {
+		"title": "Maximum transmit power",
+		"order": 16,
+		"action": {
+			"type": "view",
+			"path": "network/ti04-power"
+		},
+		"depends": {
+			"acl": ["luci-mod-network-config"],
+			"uci": {"wireless": {"@wifi-device": true}}
+		}
+	}
+}
