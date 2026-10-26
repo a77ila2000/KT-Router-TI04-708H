@@ -2,11 +2,11 @@
 
 기록 기준: **2026-10-26, 한국 시간**. 사용자 소유 allRadio TI04-708H 한 대에서 확인한 결과다. 초기 검토 문서의 단정과 이후 실기 결과를 구분해 갱신했다.
 
-**현재 완료: NOR 환경 패치, U-Boot 양방향 콘솔, NAND 전체 백업, OpenWrt NAND 영구 설치, ESC/TFTP 없는 자동 부팅2회 및 overlay 저장 파일 유지. NOR 전체와 NAND 뒤96MiB의 해시 보존 및 유선 ping/LuCI 로그인 화면 확인. 미검증: 물리 전원 재인가, DHCP 클라이언트 임대, WAN 인터넷, 실제 무선 송수신·장기 안정성.**
+**현재 완료: OpenWrt25.12.6 / Linux6.12.112 NAND 영구 설치, ESC/TFTP 없는 정상 부팅3회, overlay 저장 유지, 유선 관리·실제 DHCP, 2.4/5GHz 양방향 전송, Argon3.1.0 및 한글 기본/English 선택. 노출된 NOR8개 파티션과 NAND 뒤96MiB 해시 보존. 미검증: 물리 전원 재인가, WAN 인터넷/NAT 실통신, 나머지 포트 매핑, RF 출력·최대 성능·장기 안정성 및 실제 백업 복원.**
 
 - 시행 순서와 실패 원인: [실험·실패 이력](docs/EXPERIMENT_LOG_20261026.md).
 - 다음 작업과 과거 조사: [인수인계](docs/HANDOFF.md).
-- 후속 [OpenWrt25.12.6 RAM 시험](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md)은 kernel6.12.112/유선/DHCP/LuCI/무선 PHY 초기화를 통과했다. 시험 후 NAND23.05.3으로 복귀했으며, 25.12.6 영구 설치나 RF/WAN 시험 결과는 아니다.
+- [OpenWrt25.12.6 NAND·Wi-Fi·UI 결과](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)가 현재 상태다. 그에 앞선 [RAM 시험](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md)은 당시23.05.3으로 복귀한 별도 단계로 보존한다.
 - 원래 README 3~6절의 미검증 실험 아이디어는 보존했다. 해당 예제보다 이 문서의 실기 결과를 우선한다.
 
 ## 1. 실제 확인한 하드웨어와 저장 영역
@@ -117,7 +117,7 @@ U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송
 
 해결된 RAM 후보는 **동일 kernel을 비압축 FIT로 포장**하고 명시적 ramdisk load와 검토한 메모리 범위를 사용했다. source/staging `0x84000000`은 순정 bootipq 코드에서도 확인한 주소다. 새 이미지의 크기·kernel 출력·initrd·FDT 범위 검토를 생략하는 공통 주소 예제는 아니다.
 
-## 7. OpenWrt RAM 부팅에서 확인한 것
+## 7. 23.05.3 RAM 부팅에서 확인한 것
 
 - 최소 UART 셸: 비압축 FIT 전체 CRC와 payload CRC32/SHA1 검사 후 Linux5.15.150, 4CPU, 256MiB, `/init` ash 응답 확인. 이 후보는 모든 플래시 노드를 비활성화했고 `/proc/mtd`에 장치가 없었다.
 - 전체 사용자 환경: OpenWrt23.05.3/r23809, `rootfs_type=initramfs`, tmpfs 루트, 유선 ping과 HTTP200 응답 확인.
@@ -126,7 +126,7 @@ U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송
 - 처음 전체128MiB를 읽기 전용 노출한 후보는 UBI attach에 실패했지만 RAM 시스템은 부팅됐다. 이를 설치 또는 데이터 손상 성공/실패와 혼동하지 않는다.
 - 최초 기록에 사용한 설치용 RAM 환경은 NOR 전부 및 뒤96MiB를 읽기 전용, 앞32MiB만 `install-target`으로 쓰기 가능하게 노출했다. 이름·offset·크기·flags와 UBI 미attach를 실기로 확인한 후8절의 설치를 진행했다.
 
-## 8. NAND 영구 설치와 첫 부팅 실패 수정
+## 8. 23.05.3 NAND 설치와 첫 부팅 실패 수정
 
 준비된 사설 포트 이미지는 아래와 같다. 원본 보정값이나 장비별 데이터가 포함될 수 있어 **바이너리·전체 로그·개별 환경 값은 공개하지 않는다**. 해시는 보관 파일의 식별값이며 배포 승인이나 설치 성공 인증이 아니다.
 
@@ -164,6 +164,14 @@ U-Boot에서 앞부분부터 끝까지1MiB 단위로 두 종류를 읽어 전송
 | 남은 시험 | 물리 전원 차단/재인가, WAN 인터넷, RF 송수신·출력, 나머지 포트 매핑, 장기 안정성 |
 
 이 결과는 해당 한 대의 OpenWrt23.05.3 맞춤 포트 설치 검증이다. 일반 sysupgrade나 모든 TI04 리비전 지원을 뜻하지 않는다. **현재 MTD 번호를 다른 부팅 환경에 그대로 복사해 쓰면 안 된다.** 최초 UBI에는 수정 전 kernel이 들어 있으므로, 그 파일 하나를 다시 기록하면 root mount 실패가 재현될 수 있다.
+
+## 9. 현재25.12.6 NAND 설치와 무선·UI 검증
+
+23.05.3 현재 상태를 새로 백업한 뒤 앞32MiB만 재구성해25.12.6을 설치했다. kernel105 LEB/rootfs37 LEB와 남은 rootfs_data를 사용하며, kernel/rootfs readback SHA가 파일과 일치했다. 순정 bootipq의 `config@5`와 ubiblock root 보완 설정으로 정상 NAND 부팅3회, 저장 파일·테마·언어 설정 유지를 확인했다. 이번 검사에서 NOR8개 노출 파티션은 물리 NOR의1.5MiB이며, 새로운 전체2MiB readback을 뜻하지 않는다.
+
+PC를 각 대역 임시 AP에 연결해 Wi-Fi 소스 주소/경로·실제 무선 어댑터 바이트 및 hostapd station 기록으로 경로를 검증했다. 2.4/5GHz 각각8MiB 다운로드와8MiB 업로드가 통과했다. 시험 후 PC 원래 Wi-Fi 프로필과 공유기 wireless 설정을 복원해 두 라디오 disabled를 확인했다. WAN 케이블은 없어 인터넷/NAT 실통신을 시험하지 않았다.
+
+Argon3.1.0과 공식25.12.6 한국어 번역을 설치하고 기본 언어ko, 테마argon을 저장했다. LuCI 기본 언어 및 스타일 메뉴에서 English를 선택할 수 있다. 영문 응답 확인 후 한글로 복귀했고 재부팅 후 한글 HTML/Argon assets/설정 유지를 확인했다. Work의 브라우저 제어 비활성으로 실제 화면 렌더링·메뉴 클릭은 확인하지 않았다. 설치 해시·절차·새 실패 이력과 미시험 항목은 [상세 기록](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)에 정리했다.
 
 ## 근거와 공개 범위
 

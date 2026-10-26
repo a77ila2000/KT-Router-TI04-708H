@@ -1,6 +1,6 @@
 # 현재 작업 상태 — 2026-10-26 업데이트
 
-> **OpenWrt NAND 영구 설치와 두 차례 자동 부팅에 성공했습니다.** 순정 U-Boot에서 ESC/TFTP 없이 NAND 커널·SquashFS·UBIFS overlay가 올라오고, 저장 파일이 재부팅 후 유지됐습니다. NOR 전체와 NAND 뒤96MiB의 해시는 설치 전과 같습니다. 첫 NAND 부팅의 root 인자 오류와 수정 과정도 기록했습니다. 사용자 요청에 따라 README 3~6절의 실험 아이디어 원문은 보존합니다.
+> **현재 OpenWrt25.12.6 / Linux6.12.112가 NAND에서 실행됩니다.** 순정 U-Boot 자동 부팅3회와 저장 유지를 확인했고, 2.4/5GHz 실제 양방향 전송도 통과했습니다. Argon3.1.0·한글 기본·English 선택 옵션은 재부팅 후 유지됩니다. 노출된 NOR8개 파티션과 NAND 뒤96MiB의 해시는 보존됐습니다. 사용자 요청에 따라 README 3~6절의 실험 아이디어 원문은 보존합니다.
 
 | 항목 | 현재까지 확인한 결과 / 한계 |
 |---|---|
@@ -11,18 +11,20 @@
 | NAND |128MiB, page2048/OOB64/erase131072바이트. ECC main128MiB와 raw+OOB132MiB 백업,256조각 검증 완료. 복원 시험은 미실행 |
 | 설치 범위 | 순정 bootipq rootfs는 **앞32MiB**. 다른 UBI sequence가 있는 뒤96MiB는 보존 대상 |
 | OpenWrt RAM |23.05.3/Linux5.15.150 부팅,4CPU/256MiB/사용자 환경·유선 ping·HTTP200 확인. 두 무선 PHY 초기화; 라디오 disabled, RF 송수신과 WAN 인터넷은 미검증 |
-| 상위 버전 RAM 시험 |25.12.6/Linux6.12.112 부팅, QCA8075 PHY 수정 후 유선1Gbps·실제 DHCP·LuCI·무선 PHY2개 초기화 확인. 플래시 해시 보존 후 NAND23.05.3으로 복귀. 25.12.6 영구 설치/RF·WAN은 미시험 |
+| 상위 버전 |25.12.6/Linux6.12.112 RAM 시험과 QCA8075 PHY 수정 후 **NAND 영구 설치 완료**. 유선1Gbps·실제 DHCP·LuCI 및 무선2대역 송수신 확인 |
 | 기존 이미지 제약 | sysupgrade TAR이며 최초 initramfs 아님. 순정 U-Boot는 LZMA 미지원, gzip 출력8MiB 한도, 특정 FIT config 이름 요구 |
-| NAND 설치 | 앞32MiB에 kernel/rootfs/rootfs_data 기록과 readback 완료. 첫 부팅의 root mount 실패 후 DTB를 수정하고 kernel 볼륨만 재기록·검증 |
-| 자동 부팅·저장 유지 | 순정 bootipq의 `config@5` 선택으로 NAND 부팅2회, ESC 송신0. SquashFS /rom + UBIFS /overlay 및 저장 파일 유지 확인. 물리 전원 차단/재인가 시험은 별도 |
-| 관리·남은 검증 | 유선 ping 및 LuCI 로그인 화면 확인. DHCP 활성·dnsmasq 실행, 실제 클라이언트 임대는 미시험. 라디오 disabled, WAN/RF·장기 안정성 미검증 |
+| NAND 설치 | 23.05.3 앞32MiB 새 백업 후25.12.6 UBI 기록/readback. kernel105/rootfs37 LEB. 과거23.05 첫 부팅 root mount 실패·수정도 별도 기록 |
+| 자동 부팅·저장 유지 | 25.12.6 순정 bootipq `config@5` NAND 부팅3회, ESC 송신0/TFTP 없음. SquashFS /rom + UBIFS /overlay, 저장 파일·테마·언어 설정 유지. 물리 전원 재인가는 미시험 |
+| 무선·관리 UI | 2.4/5GHz 각8MiB 다운로드·업로드 성공, 시험 후 라디오 disabled 복원. Argon3.1.0·한글 기본, 시스템의 언어 및 스타일에서 English 선택 가능 |
+| 남은 검증 | WAN 인터넷/NAT 실통신, 물리 전원 재인가, 나머지 실물 포트 매핑, RF 출력·최대 처리량·장기 안정성·백업 복원. UI는 backend/HTTP 확인, 화면 클릭·렌더링은 미확인 |
 | 웹·버튼 경로 | 조사 범위에서 미확보.8801 인증 후 메뉴, 암호 생성 규칙, 버튼↔GPIO 매핑은 미확정. ‘72개 모두 실패/업로드 원천 부재’ 단정 철회 |
 
 - **종합 결과·정정**: [OpenWrt 진행 보고서](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)
-- **25.12.6 RAM 시험과 남은 제약**: [상위 버전 시험 기록](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md)
+- **현재25.12.6 설치·무선·한글/Argon 결과**: [NAND·Wi-Fi·UI 시험 기록](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)
+- **앞선25.12.6 RAM 시험**: [RAM 시험 기록](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md)
 - **성공·실패·실행 전 중단 이력**: [2026-10-26 실험 기록](docs/EXPERIMENT_LOG_20261026.md)
 - **재개 조건과 과거 조사**: [인수인계](docs/HANDOFF.md)
-- 설치한 것은 OpenWrt23.05.3/Linux5.15.150 기반 맞춤 포트다. 초기 root 암호는 비어 있으므로 로컬에서 설정한다. 일반 sysupgrade는 기존 LZMA/config/파티션 제약 때문에 차단하며, 최초 기록했던 UBI는 root 인자 수정 전의 역사적 산출물이다.
+- 현재 설치는 공식25.12.6 구성요소에 TI04용 DTB/FIT/32MiB 구성을 적용한 맞춤 포트다. 초기 root 암호는 비어 있으므로 로컬에서 설정한다. 일반 sysupgrade는 기존 LZMA/config/파티션 제약 때문에 차단한다. 과거23.05 최초 UBI는 root 인자 수정 전의 역사적 산출물이다.
 - CN1 ①은 미연결. 사용한 ②/③/④ 배선에서 UART 양방향 명령이 확인됐지만, 핀 번호·전압·보드 리비전을 다른 장비에 그대로 적용하지 않습니다.
 - 아래 3~6절의 GPIO/버튼/글리칭/공통 initramfs 제안은 역사적 실험 아이디어입니다. 실제로 실패하거나 수정된 조건은 위 보고서와 실험 기록을 우선합니다. 최소 환경 기록도 ‘100% 안전/완전 복원 보장’으로 해석하지 않습니다.
 
