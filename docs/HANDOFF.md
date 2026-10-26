@@ -121,3 +121,28 @@ Windows에 Ghidra가 설치되어 있거나 REA MCP가 연결되어 있어도 ra
 - [flashrom CH341A 전압 주의사항](https://github.com/flashrom/flashrom/blob/main/doc/supported_hw/supported_prog/ch341ab.rst), [인서킷 읽기 제약](https://github.com/flashrom/flashrom/blob/main/doc/user_docs/in_system.rst)
 - [GigaDevice GD25Q16C](https://www.gigadevice.com/product/flash/spi-nor-flash/gd25q16c), [Macronix Serial NAND](https://www.macronix.com/en-us/products/NAND-Flash/Serial-NAND-Flash/Pages/default.aspx)
 - [Linux N_TTY 에코](https://www.kernel.org/doc/html/latest/driver-api/tty/n_tty.html)
+
+
+---
+
+## 8. 2026-10-26 실기 검증 및 역어셈블 분석 완료 요약
+
+상세 분석 내용은 [OPENWRT_INSTALLATION_ANALYSIS_REPORT.md](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)에 정리되었다.
+
+1. **2MiB SPI NOR 실기 3회 덤프 검증 완료**:
+   - 실장 위치: `U33` (SOP-8 패키지, GigaDevice `GD25Q16CSIG`, JEDEC ID `C8 40 15`).
+   - CH341A(3.3V)를 이용하여 3회 연속 덤프(`nor-read1.bin`, `nor-read2.bin`, `nor-read3.bin`, 각 2,097,152바이트) 완료.
+   - SHA-256 해시 일치: `c33402801b9c4484b20634303675fe7422b0dcde1e6e1d95c4fac790bea9d23e`. 순정 원본 복구본 확보 완료.
+2. **부트로더(APPSBL) 역어셈블 분석 완료 (UART 콘솔 락 규명)**:
+   - 순정 `bootdelay=0` (Mode 0): `GPIO2 == 0 && GPIO63 == 0` (접지) 조건 충족 후 1초 내 비밀 문자열 `@tnie`가 입력되어야만 autoboot를 중단함. 조건 불충족 시 키 입력을 일체 검사하지 않고 0초 만에 커널로 직행.
+   - `GPIO63`은 DTS상 `SW4 (RESET)`임.
+   - `bootdelay=2012` 설정 시 Mode 1(ESC 폴링 모드)로 동작하여 GPIO 락 및 비밀번호 없이 전원 인가 시 `ESC` 키 입력만으로 즉시 U-Boot 프롬프트 진입 가능.
+3. **APPSBLENV 4KB 섹터 최소 패치 검증**:
+   - 2MiB NOR 오프셋 `0x0E0000` 환경변수 섹터에서 `bootdelay=0` -> `bootdelay=2012`로 변경 (단 31바이트 수정) 및 CRC32 재계산 검증 완료. 부트로더 본체 및 ART 파티션은 100% 보존.
+   - 실기 기록 시 Chip Erase(`0xC7`)는 금지되며 오직 `0x0E0000` 4KB 섹터만 플래싱해야 함.
+4. **무장비 기본 상태 설치 결론**:
+   - 웹 UI(8899/8801)는 로컬 펌웨어 업데이트 기능이 원천 부재하며 WAN TR-069 전자서명 푸시 전용임.
+   - 무장비 UART 경로는 `SW4(RESET)` + `SW1(FACTORY RESET)`을 누른 채 전원 인가 직후 1초 내 `@tnie\r` 전송 시 진입 가능성이 있으나, `GPIO2` 물리 배선 미확정으로 100% 성공이 보장되지 않음.
+5. **OpenWrt 설치 바이너리 주의사항**:
+   - 보유한 `openwrt-kt9200-*.bin` (10.3MB)은 128MB SPI NAND용 sysupgrade TAR 파일이며, 2MB SPI NOR에 직접 플래싱하면 영구 벽돌(Hard Brick) 발생.
+   - 순정 U-Boot 프롬프트 획득 -> TFTP RAM 부팅(`openwrt-initramfs-kernel.bin`) -> ART 캘리브레이션 및 순정 NAND 백업 -> NAND에 sysupgrade 설치하는 4단계 로드맵으로 진행해야 함.

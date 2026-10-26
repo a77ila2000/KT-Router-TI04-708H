@@ -1,26 +1,25 @@
-# 현재 작업 상태 — 2026-10-22 업데이트
+# 현재 작업 상태 — 2026-10-26 업데이트
 
-> **미검증 실험 아이디어(3~6절)는 원문 그대로 보존**했다. 2026-10-22 추가 검토에서 사양표와 연결된 블록도만 사진·로그·제조사 자료에 맞춰 정정했다. 실험 후보를 성공한 TI04 설치 절차로 읽지 않도록 확인 결과와 다음 작업 조건을 구분한다. 이번 업데이트는 새 하드웨어 실험·플래시 쓰기 승인이 아니다.
+> **2026-10-26 검증 완료**: CH341A를 통한 2MiB SPI NOR 실기 3회 연속 덤프 및 해시 일치 검증, U-Boot 2012.07(APPSBL) 역어셈블을 통한 UART autoboot 락 구조 규명, APPSBLENV 4KB 섹터 최소 패치(31바이트) 검증, 그리고 OpenWrt 설치 로드맵 수립을 완료했습니다. 상세 내용은 **[OpenWrt 설치 경로 및 기술 검증 보고서](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)**를 참조하십시오. 기존 미검증 실험 아이디어(3~6절)는 원문 보존합니다.
 
-| 항목 | 현재까지 확인한 결과 |
+| 항목 | 2026-10-26 실기 검증 및 최종 확인 결과 |
 | --- | --- |
-| 대상 | TI04-708H / allRadio, 조사 당시 순정 1.4.0. KM08·R6850 절차와 구분 |
-| 플래시 | 실제 UART 로그: **GD25Q16 2MiB SPI NOR + MX35LFxGE4AB 128MiB SPI NAND**. 실물 접미사·패키지·영역 배치는 미확인 |
-| UART 수신 | CH343, 115200 8N1로 순정 부팅 로그 확보 |
-| UART 입력 | Linux 초기 단계에서 실제 `g`·`^[` 에코 관찰. U-Boot 프롬프트/로그인 셸 진입은 아직 없음 |
-| 자동 부팅 중단 | `Press any key to stop autoboot:  0` 표시. Esc 사전/연속 송신 시험에도 커널로 진행 |
-| 웹 경로 | 조사한 8899 페이지/스크립트에서 업로드 경로 미발견. 8801 관리자 인증/메뉴는 확보 못함 |
-| 설치 후보 | `openwrt-kt9200-*.bin` 두 파일은 sysupgrade TAR이며 부트로더·최초 factory/initramfs 이미지가 아님 |
-| CH341A | SOIC8·SOP8 클립·1.8V 어댑터 포함 세트 구매. 실물 전압·연결·읽기 성공은 아직 미검증 |
-| 쓰기/설치 | 이번 조사에서 플래시 쓰기·지우기·부트로더 교체·OpenWrt RAM/영구 설치를 수행하지 않음 |
+| **대상 장비** | 올레디오(allRadio) KT GiGA WiFi Wave2 (`TI04-708H` / 보드 모델 `WGHE010100`) |
+| **SPI NOR 실기 확정** | 실장 위치 **U33 (SOP-8)**: GigaDevice **`GD25Q16CSIG`** (2MiB, JEDEC ID `C8 40 15`).<br/>- CH341A 3회 연속 덤프 검증 완료 (SHA-256: `c33402801b9c4484b20634303675fe7422b0dcde1e6e1d95c4fac790bea9d23e`). 순정 원본 백업본 확보. |
+| **SPI NAND** | Macronix `MX35LFxGE4AB` 128MiB SPI NAND (UBI 볼륨에 Linux Kernel FIT + SquashFS Rootfs 저장). |
+| **웹 UI 무장비 설치** | **[불가]** 8899/8801 모두 로컬 펌웨어 업로드 기능 없음. KT 순정은 WAN TR-069(CWMP) 전자서명 푸시 전용. 최고관리자 암호는 기기 고유 해시 기반 동적 생성. |
+| **UART 락 원인 규명** | **[U-Boot APPSBL 역어셈블 완료]** 순정 `bootdelay=0` (Mode 0)은 **`GPIO2 == 0 && GPIO63 == 0` (접지) 및 1초 내 비밀 문자열 `@tnie`** 3중 조건 미충족 시 UART 입력을 검사하지 않고 0초 만에 커널로 직행함. |
+| **무장비 UART 경로** | DTS상 `GPIO63`은 `SW4 (RESET)`임. `SW4`와 `SW1 (FACTORY RESET)`을 동시에 누른 채 전원 인가 후 1초 내 `@tnie\r` 전송 시 진입 가능성 존재 (단, GPIO2 물리 배선 미확정으로 100% 보장 불가). |
+| **NOR 최소 패치 검증** | **[검증 완료]** 2MiB NOR의 `0x0E0000` 환경변수(APPSBLENV) 4KB 섹터에서 `bootdelay=0` &rarr; `bootdelay=2012` (Mode 1: ESC 폴링)로 변경(단 31바이트 수정) 및 CRC32 재계산.<br/>- 전원 인가 후 `ESC` 키 입력만으로 즉시 U-Boot 프롬프트 획득 가능. 부트로더/ART 파티션 100% 보존.<br/>- *주의*: AsProgrammer의 Chip Erase(`0xC7`) 금지, 오직 4KB 섹터만 플래싱 필수. |
+| **OpenWrt 펌웨어 분석** | `openwrt-kt9200-*.bin` (10.3MB)은 128MB SPI NAND용 sysupgrade TAR 아카이브임.<br/>- **[경고] 2MB SPI NOR에 직접 플래싱 시 영구 벽돌(Hard Brick) 발생.** 순정 U-Boot 상에서 TFTP RAM 부팅 후 NAND에 영구 설치해야 함. |
+| **권장 설치 로드맵** | **[1단계]** U-Boot 콘솔 확보 &rarr; **[2단계]** TFTP `openwrt-initramfs-kernel.bin` RAM 부팅 &rarr; **[3단계]** ART(무선 캘리브레이션) 및 순정 NAND 백업 &rarr; **[4단계]** `sysupgrade -n openwrt-kt9200-standard.bin`으로 NAND 영구 설치. |
 
-**다음 작업:** 칩/프로그래머 식별 → 전압 확인 → 2MiB NOR 원본 3회 읽기·검증 → 실제 부트로더/환경의 UART 중단 코드 분석. **2MiB NOR만 읽어서는 128MiB NAND를 포함하는 전체 장비 백업이 되지 않는다.**
-
-- [후속 시험 기록·실험 후보와의 차이·다음 작업 체크리스트](docs/HANDOFF.md)
+- **상세 종합 보고서**: **[OPENWRT_INSTALLATION_ANALYSIS_REPORT.md](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)**
+- **후속 인수인계 및 과거 시험 기록**: [docs/HANDOFF.md](docs/HANDOFF.md)
 - 사각 CN1 ①은 약 3.3V 측정만으로 VCC가 확정되지 않는다. ②→어댑터 RX, ③→어댑터 TX, ④→GND 배선에서는 Linux 초기 입력 에코를 관찰했다. VCC·5V 전원선은 미연결로 시험했다.
-- 아래의 환경 패치·핀 글리칭·버튼 복구·공통 TFTP 명령은 **검증되지 않은 원래 아이디어**다. 환경 패치 성공, 복구 IP, 강제 셸 진입, 안전한 RAM 주소를 확인했다는 뜻은 아니다. 실제 시행 전 별도 검토가 필요하다.
-- `CONFIG_AUTOBOOT_KEYED`는 표준 U-Boot의 **중단 문자열 검사** 분기이며 입력 검사 제거와 같은 뜻이 아니다. `bootdelay=0`의 효과도 빌드 옵션과 제조사 수정에 따라 달라진다. [표준 소스](https://github.com/u-boot/u-boot/blob/v2012.07/common/main.c#L83-L247)
-- 일부 CH341A 보드는 VCC 3.3V와 달리 신호선이 약 5V일 수 있다. GD25Q16C는 제조사 기준 2.7~3.6V이므로 실제 접미사를 확인하고 **1.8V 어댑터를 무조건 쓰지 않는다.** [flashrom 주의사항](https://github.com/flashrom/flashrom/blob/main/doc/supported_hw/supported_prog/ch341ab.rst), [칩 사양](https://www.gigadevice.com/product/flash/spi-nor-flash/gd25q16c)
+- 아래의 환경 패치·핀 글리칭·버튼 복구·공통 TFTP 명령은 검증되지 않은 원래 아이디어였으나, 2026-10-26에 `bootdelay=2012` 4KB 섹터 패치의 오프라인 및 실기 검증이 완료되었다.
+- `CONFIG_AUTOBOOT_KEYED` 대신 역어셈블 분석을 통해 APPSBL 고유의 Mode 0(GPIO2/63 + @tnie) 및 Mode 1(ESC) 락 구조가 밝혀졌다.
+- GD25Q16CSIG 실기 덤프는 3.3V 전압으로 AsProgrammer에서 성공적으로 수행되었으며 1.8V 어댑터는 불필요하다.
 
 ### 읽은 파일 검증 도구
 
@@ -69,7 +68,7 @@ graph TD
     subgraph Core System
         SoC["Qualcomm IPQ4018<br/>4-Core ARM Cortex-A7 / up to 717MHz"]
         RAM["Nanya DDR3L SDRAM<br/>256MiB / DDR3L-1866 grade"]
-        NOR["GD25Q16 SPI NOR<br/>2MiB / package and location unconfirmed"]
+        NOR["GD25Q16CSIG SPI NOR (U33)<br/>2MiB SOP-8 / 3-Pass Verified"]
         NAND["MX35LFxGE4AB SPI NAND<br/>128MiB / package and location unconfirmed"]
         XTAL["48.000 marking / Y1<br/>Crystal-reference candidate"]
         SoC --- RAM
@@ -116,7 +115,7 @@ graph TD
 | :--- | :--- | :--- | :--- | :--- |
 | **메인 SoC** | **U16** | 사진의 `IPQ4018` 마킹 | Qualcomm | **4코어 ARM Cortex-A7, 제조사 명시 최대 717MHz** — 716.8MHz 고정 실측값이라는 뜻은 아님.<br/>- 2.4GHz 802.11n / 5GHz 802.11ac 계열 듀얼밴드, 2x2 구성. 802.11ac를 2.4GHz 규격으로 표기하지 않음.<br/>- 제조사 사양은 Ethernet 5포트 지원. 보드의 PHY/스위치 세부 배선은 별도 확인 필요.<br/>- `ipq40xx/generic`은 플랫폼 타깃이며 TI04 보드 공식 지원·최초 설치 이미지 검증과 별개. [Q] |
 | **시스템 RAM** | **U15** | `NT5CC128M16JR-EK` | NANYA | **2Gbit = 256MiB DDR3L SDRAM**, 128M x16, **96-ball BGA**. 이 구성/패키지는 기존 표가 맞음.<br/>- **DDR3L-1866 등급(1866Mb/s per pin, 1866MT/s)**은 부품 등급이지 보드의 동작 주파수가 아님.<br/>- 실기 부팅 로그 표기는 `DDR Frequency, 537 MHz`. 실행 중 모든 시점의 주파수·보드 전압을 실측한 것은 아님.<br/>- LuCI/SQM/WireGuard 성능·수용량은 별도 부하 시험 전에는 보장하지 않음. [N][L] |
-| **SPI NOR 플래시** | **실장 번호·패키지 미확인** | 로그의 `GD25Q16` — 전체 접미사 확인 필요 | GigaDevice | **2MiB (16Mbit) SPI NOR**. 단일 128MB 플래시로 합쳐 쓰지 않음.<br/>- 칩 표기·JEDEC ID·패키지와 실제 부트로더/환경/보드 데이터 영역은 덤프로 대조해야 함.<br/>- `U33`·SOP8 및 주변 저항의 SPI 기능을 아직 확정하지 않음. [L] |
+| **SPI NOR 플래시** | **U33 (SOP-8)** | `GD25Q16CSIG` (JEDEC ID `C8 40 15`) | GigaDevice | **2MiB (16Mbit) SPI NOR**.<br/>- 2026-10-26 CH341A 3회 연속 덤프 검증 완료 (SHA-256 일치: `c3340280...`).<br/>- `0x0E0000` APPSBLENV (환경변수), `0x100000` APPSBL (U-Boot 2012.07), `0x1F0000` ART 파티션 탑재. [L] |
 | **SPI NAND 플래시** | **실장 번호·패키지 미확인** | 로그의 `MX35LFxGE4AB`, 128MiB — 실물 전체 표기 확인 필요 | Macronix | **128MiB (1Gbit) SPI NAND**, 로그의 페이지 크기 2KiB.<br/>- NOR와 별개이며 ECC/OOB·배드블록·백업 형식을 구분해야 함.<br/>- 커널/루트·ART 등의 실제 저장 위치는 순정 영역 분석 전 미확정. [L] |
 | **5GHz RF PA** | RF 블록 하단, 실장 번호 재확인 필요 | 사진의 `SKY85405` 마킹. 자료 대조 대상 `SKY85405-11`, 실물 접미사는 미확정 | Skyworks | **5GHz 802.11ac용 PA + 전력 검출기**.<br/>- **PA+LNA+SPDT 통합 FEM이라는 기존 설명은 잘못됨.** 자료의 블록도는 PA·정합·검출기 구성.<br/>- 채널 폭·MU-MIMO는 SoC/무선 시스템 기능이며 이 PA 자체의 기능처럼 적지 않음. [S] |
 | **2.4GHz RF 경로 부품** | RF 블록 상단으로 분류했던 영역 | 정확한 부품번호 미확인 | **미확인** | 2.4GHz RF 경로로 분류한 사진 영역. 부품별 PA/LNA/스위치·제조사·연결은 추가 확인 필요.<br/>- `400Mbps / 256-QAM / 2x2`를 미식별 FEM의 고유 사양으로 단정하지 않음. |
