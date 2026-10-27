@@ -1,0 +1,47 @@
+#!/bin/sh
+# The board has one WLAN lamp. Count wireless interfaces only, never br-lan.
+led=/sys/class/leds/green:wlan
+[ -w "$led/brightness" ] || exit 1
+trap 'printf none > "$led/trigger"; printf 0 > "$led/brightness"; rm -f /var/run/ti04-wifi-led.status; exit' TERM INT
+previous=-1
+own_timer=0
+while :; do
+ read -r trigger < "$led/trigger"
+ case "$trigger" in
+  *'[none]'*) ;;
+  *'[timer]'*) [ "$own_timer" = 1 ] || { sleep 1; continue; } ;;
+  *) own_timer=0; sleep 1; continue ;;
+ esac
+ active=0; total=0; activity=0
+ for net in /sys/class/net/*; do
+  [ -e "$net/phy80211" ] || continue
+  read -r carrier < "$net/carrier" 2>/dev/null || continue
+  [ "$carrier" = 1 ] || continue
+  active=1
+  read -r rx < "$net/statistics/rx_bytes" || continue
+  read -r tx < "$net/statistics/tx_bytes" || continue
+  total=$((total + rx + tx))
+ done
+ if [ "$active" = 1 ]; then
+  if [ "$previous" -ge 0 ] && [ "$total" != "$previous" ]; then
+   activity=1
+   if [ "$own_timer" = 0 ]; then
+    printf timer > "$led/trigger"
+    printf 75 > "$led/delay_on"
+    printf 75 > "$led/delay_off"
+    own_timer=1
+   fi
+  else
+   printf none > "$led/trigger"
+   own_timer=0
+   printf 1 > "$led/brightness"
+  fi
+ else
+  printf none > "$led/trigger"
+  own_timer=0
+  printf 0 > "$led/brightness"
+ fi
+ printf 'active=%s bytes=%s activity=%s\n' "$active" "$total" "$activity" > /var/run/ti04-wifi-led.status
+ previous=$total
+ sleep 1
+done

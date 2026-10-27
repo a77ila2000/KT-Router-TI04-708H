@@ -10,7 +10,7 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 
 1. **[대상 보드·준비물 확인](INSTALLATION.md#1-적용-대상과-설치-경로)** — allRadio TI04와 다른 KT 모델을 구분합니다.
 2. **[설치 안내](INSTALLATION.md)** — 자기 백업, UART 진입, RAM 설치 환경, 앞32MiB 기록, 부팅/저장 판정 순서입니다.
-3. **[최종 실기 검증 결과](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)** — 어느 기능까지 확인됐는지 봅니다.
+3. **[설치 후 최신 검증·설정](docs/POST_INSTALL_SETTINGS_20261027.md)** — WAN 통신, LED, NTP와 화면 표시의 확인 범위를 봅니다. 이전 [NAND·Wi-Fi·UI 검증](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)도 보존합니다.
 4. 문제가 생기면 **[증상별 조치](INSTALLATION.md#7-첫-설정과-문제가-생겼을-때)**와 필요한 실패 기록만 확인합니다.
 
 ## 설치 경로
@@ -35,19 +35,24 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 | 버전·저장 | OpenWrt25.12.6 / Linux6.12.112, NAND 앞32MiB, SquashFS + UBIFS overlay |
 | 정상 부팅 | 순정 bootipq `config@5`, ESC/TFTP 없는 정상 부팅3회, 저장 파일·UI 설정 유지 |
 | 보존 | 노출된 NOR8개 파티션 및 NAND 뒤96MiB의 설치 전후 SHA 일치 |
-| 유선·무선 | 기존 실물 LAN1 1Gbps 관리/DHCP, 2.4/5GHz 각8MiB 다운로드·업로드 |
+| 유선·무선 | 실제 LAN4와 WAN 각각1Gbps, DHCP·DNS·NAT/인터넷 통신. 두 무선 대역 실제 인터넷 송수신 확인 |
 | UI | Argon3.1.0, 한글 기본, English 선택 및 재부팅 유지. 설정/HTTP 검사, 시각적 렌더링은 미확인 |
-| 미검증 | WAN 인터넷/NAT 실통신, 물리 전원 재인가, 나머지 포트 매핑, RF 출력·최대 처리량·장기 안정성·실제 복원 |
+| LED·시간 | WAN·실물 LAN4 LED 반응 사용자 확인, 두 대역 공용 Wi-Fi LED 소프트웨어 반응 검사, 누락 NTP 기본값 보완 |
+| 미검증 | 물리 전원 재인가, 나머지 LAN 케이블 시험, RF 출력·최대 처리량·장기 안정성·실제 복원. 무선 대역 표시의 사용자 화면 문제는 진단 중 |
 
 현재 무선은 시험 전의 disabled 상태로 복구했습니다. Argon/한글은 기본 UBI 기록 뒤 별도로 설치한 패키지이며, 향후 배포본의 포함 여부는 manifest로 확인해야 합니다. 일반 sysupgrade는 이 순정 U-Boot 포트에서 차단돼 있습니다.
 
 관리자에 **네트워크 → 최대 송신 출력** 메뉴를 추가했습니다. 두 대역의 **최대 출력(자동) / 수동 상한**을 기존 무선 설정과 연동합니다. 현재 드라이버 허용 범위를 사용하며 구형35dBm 고정 요청 패치는 포함하지 않습니다. [확장 소스·사용법](luci/README.md)은 별도 overlay 파일이며 기존 UBI 이미지에는 포함되지 않았습니다.
+
+2026-10-27의 **[LED·시간 설정 소스와 적용/복원 방법](device-settings/README.md)**도 별도로 제공합니다. 무선 대역 표시는 서버 파일·로직 검사까지 통과했지만 사용자 화면에는 기존 이름이 남아 추가 진단 중입니다. 시각적 완료로 표시하지 않습니다.
 
 ## 자료 찾기
 
 | 자료 | 용도 |
 |---|---|
 | **[설치 안내](INSTALLATION.md)** | 처음 설치하는 사용자용 기준 문서 |
+| [최신 설정·통신 검증](docs/POST_INSTALL_SETTINGS_20261027.md) | WAN·LED·NTP·화면 표시·실패 수정 결과 |
+| [LED·NTP 적용/복원](device-settings/README.md) | 실제 적용한 소스, 빌드 및 별도 적용 절차 |
 | [최종 NAND·Wi-Fi·UI 검증](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md) | 결과와 기능별 검증 범위 |
 | [실패·수정 이력](docs/EXPERIMENT_LOG_20261026.md) | 오류가 발생했을 때 원인 대조 |
 | [RAM/PHY 시험](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md) | 포팅 과정의 기술 근거 |

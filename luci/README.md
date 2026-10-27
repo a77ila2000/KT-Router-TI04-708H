@@ -62,3 +62,13 @@ rm -f /tmp/luci-indexcache.*.json
 ```sh
 node tests/test_radio_power.cjs
 ```
+
+## 무선 목록의 대역 표시
+
+`patches/render_radio_badge.js`는 무선 목록에서 대역을 굵게 표시하고 내부 식별자는 작은 글씨로 함께 표시한다. 예: **2.4GHz Wi-Fi** / `radio0`, **5GHz Wi-Fi** / `radio1`. 번호를 고정해 해석하지 않고 각 장치의 실제 `band` 설정을 읽는다. 꺼진 라디오에서도 표시되며 알 수 없는 대역은 기존 식별자를 유지한다.
+
+`patches/patch_wireless_labels.py ORIGINAL.js OUTPUT.js`는 검사한 LuCI25.12 무선 화면에서 해당 표시 함수만 바꾼다. 적용 전 장비의 원본을 보관하고 버전을 대조해야 한다. TI04 실기에는2026-10-27 적용했으며, 실제 제공된 JS의 SHA256 일치와 네트워크·무선 설정 파일 불변을 확인했다. 기본 UBI 이미지에는 아직 포함하지 않았다. 서버 파일 검증 이후에도 사용자 화면에는 기존 식별자만 보여 대역 값/로딩 경로 추가 진단 중이다. 시각적 확인 완료로 해석하지 않는다.
+
+```sh
+node tests/test_wireless_band_labels.cjs
+```

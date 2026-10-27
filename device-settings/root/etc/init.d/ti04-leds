@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+START=97
+STOP=10
+USE_PROCD=1
+start_service() {
+ [ "$(cat /tmp/sysinfo/board_name)" = 'giga,kt-9200' ] || return 1
+ procd_open_instance lan
+ procd_set_param command /usr/sbin/ti04-phy-led --monitor-lan
+ procd_set_param respawn 3600 5 5
+ procd_close_instance
+ procd_open_instance wifi
+ procd_set_param command /usr/sbin/ti04-wifi-led
+ procd_set_param respawn 3600 5 5
+ procd_close_instance
+}
