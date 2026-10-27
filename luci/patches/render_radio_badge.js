@@ -1,6 +1,6 @@
 function render_radio_badge(radioDev) {
 	const id = radioDev.getName();
-	const band = radioDev.get('band');
+	const band = radioDev.get('band') || radioDev.ubus('dev', 'config', 'band');
 	const label = band === '2g' ? '2.4GHz Wi-Fi' :
 		band === '5g' ? '5GHz Wi-Fi' :
 		band === '6g' ? '6GHz Wi-Fi' : null;

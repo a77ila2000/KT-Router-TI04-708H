@@ -65,10 +65,54 @@ node tests/test_radio_power.cjs
 
 ## 무선 목록의 대역 표시
 
-`patches/render_radio_badge.js`는 무선 목록에서 대역을 굵게 표시하고 내부 식별자는 작은 글씨로 함께 표시한다. 예: **2.4GHz Wi-Fi** / `radio0`, **5GHz Wi-Fi** / `radio1`. 번호를 고정해 해석하지 않고 각 장치의 실제 `band` 설정을 읽는다. 꺼진 라디오에서도 표시되며 알 수 없는 대역은 기존 식별자를 유지한다.
+`patches/render_radio_badge.js`는 무선 목록에서 대역을 굵게 표시하고 내부 식별자는 작은 글씨로 함께 표시한다. 예: **2.4GHz Wi-Fi** / `radio0`, **5GHz Wi-Fi** / `radio1`. 번호를 고정해 해석하지 않고 각 장치의 `band` 설정을 읽으며 없으면 실행 상태의 band를 확인한다. 꺼진 라디오에서도 표시되며 알 수 없는 대역은 기존 식별자를 유지한다.
 
-`patches/patch_wireless_labels.py ORIGINAL.js OUTPUT.js`는 검사한 LuCI25.12 무선 화면에서 해당 표시 함수만 바꾼다. 적용 전 장비의 원본을 보관하고 버전을 대조해야 한다. TI04 실기에는2026-10-27 적용했으며, 실제 제공된 JS의 SHA256 일치와 네트워크·무선 설정 파일 불변을 확인했다. 기본 UBI 이미지에는 아직 포함하지 않았다. 서버 파일 검증 이후에도 사용자 화면에는 기존 식별자만 보여 대역 값/로딩 경로 추가 진단 중이다. 시각적 확인 완료로 해석하지 않는다.
+`patches/patch_wireless_labels.py ORIGINAL.js OUTPUT.js`는 검사한 LuCI25.12 무선 화면에서 해당 표시 함수만 바꾼다. 최종 적용은 **별도 리소스 `network/ti04-wireless-bands`**를 사용한다. `route_wireless_bands.py`는 기존 무선 메뉴의 action 경로만 바꾸고 제목·권한·의존 조건과 다른 메뉴를 보존한다.
+
+최초 같은 파일 경로를 수정했을 때는 서버 SHA 일치와 강제 새로고침만으로 실제 화면이 갱신되지 않았다. 실제 band 설정은 정상이었다. 별도 화면 경로와 실행 상태 fallback 적용 후 **사용자가2.4GHz/5GHz 표시를 확인**했다. 최초 현상의 정확한 캐시/로딩 원인을 확정하지는 않았다. 최종 원본 `wireless.js`는 복원했고 네트워크·무선 설정 파일은 SHA 불변이다. 기본 UBI 이미지에는 아직 포함하지 않았다.
+
+### 대역 표시 적용
+
+PC에서 자기 공유기의 원본 두 파일을 받아 보관하고 새 파일을 생성한다. `YOUR_ROUTER`는 자기 공유기 주소로 바꾼다. SSH 암호는 직접 입력하며 저장하지 않는다.
+
+```sh
+ROUTER=root@YOUR_ROUTER
+scp -O "$ROUTER:/www/luci-static/resources/view/network/wireless.js" wireless.original.js
+scp -O "$ROUTER:/usr/share/luci/menu.d/luci-mod-network.json" luci-mod-network.original.json
+python3 luci/patches/patch_wireless_labels.py wireless.original.js ti04-wireless-bands.js
+python3 luci/patches/route_wireless_bands.py luci-mod-network.original.json luci-mod-network.bands.json
+scp -O ti04-wireless-bands.js luci-mod-network.bands.json "$ROUTER:/tmp/"
+```
+
+공유기 셸에서 대상 모델·새 파일을 확인하고 메뉴를 백업한 뒤 적용한다. 같은 확장을 이미 설치했으면 기존 파일/백업을 지우지 말고 버전을 비교한다.
+
+```sh
+set -e
+[ "$(cat /tmp/sysinfo/board_name)" = 'giga,kt-9200' ]
+[ "$(cat /tmp/sysinfo/model)" = 'TI04-708H' ]
+view=/www/luci-static/resources/view/network/ti04-wireless-bands.js
+menu=/usr/share/luci/menu.d/luci-mod-network.json
+backup=/root/ti04-wireless-bands-backup
+[ ! -e "$view" ] && [ ! -e "$backup" ]
+mkdir -m 700 "$backup"
+cp -p "$menu" "$backup/luci-mod-network.json"
+cp /tmp/ti04-wireless-bands.js "$view"
+chmod 644 "$view"
+cp /tmp/luci-mod-network.bands.json "$menu"
+chmod 644 "$menu"
+for cache in /tmp/luci-indexcache.*.json; do [ ! -f "$cache" ] || rm -f "$cache"; done
+sync
+```
+
+무선 페이지를 새로고침해 실제 표시를 확인한다. 원래 무선 설정·SSID·암호·라디오 활성화 상태를 저장/변경할 필요가 없다. 원복은 보관했던 메뉴를 복사하고 추가한 view만 제거한 뒤 같은 메뉴 캐시를 갱신한다. 기존 `wireless.js`를 덮어쓰지 않는다.
+
+```sh
+cp -p /root/ti04-wireless-bands-backup/luci-mod-network.json /usr/share/luci/menu.d/luci-mod-network.json
+rm -f /www/luci-static/resources/view/network/ti04-wireless-bands.js
+for cache in /tmp/luci-indexcache.*.json; do [ ! -f "$cache" ] || rm -f "$cache"; done
+```
 
 ```sh
 node tests/test_wireless_band_labels.cjs
+python3 -m unittest discover -s tests -p 'test_wireless_label_patch.py'
 ```

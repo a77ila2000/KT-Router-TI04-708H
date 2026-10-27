@@ -7,9 +7,11 @@ const L = { resource: value => ({ format: suffix => value.replace('%s', suffix) 
 const render = new Function('E', 'L', `${source}; return render_radio_badge;`)(E, L);
 const text = node => node == null ? '' : typeof node === 'string' ? node :
     Array.isArray(node) ? node.map(text).join('') : text(node.children);
-function check(id, band, up, expected) {
+function check(id, band, up, expected, runtimeBand) {
     const device = Object.freeze({ getName: () => id, get: option => {
         assert.equal(option, 'band'); return band;
+    }, ubus: (...parts) => {
+        assert.deepEqual(parts, ['dev', 'config', 'band']); return runtimeBand;
     }, isUp: () => up });
     const badge = render(device);
     assert.equal(badge.attrs.title, id);
@@ -23,4 +25,5 @@ check('radio0', '5g', false, '5GHz Wi-Fi'); // Band comes from configuration, ne
 check('radio9', '6g', true, '6GHz Wi-Fi');
 check('radio7', undefined, false, null);
 check('radio7', 'constructor', true, null);
+check('radio9', undefined, false, '5GHz Wi-Fi', '5g');
 console.log('PASS: configured band labels, disabled radios, swapped IDs and unknown-band fallback');
