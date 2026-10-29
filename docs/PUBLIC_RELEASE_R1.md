@@ -2,6 +2,23 @@
 
 2026-10-29, 다른 사용자가 내려받을 파일이 없던 문제를 보완한 첫 공개 시험판이다.
 
+## 공유기 실기 설치·테스트 완료
+
+**실제 allRadio TI04-708H 개발 장비1대에 OpenWrt25.12.6을 NAND 영구 설치하고 아래 항목의 시험을 완료했다.** 근거는2026-10-26 설치 기록과2026-10-27 후속 통신·LED·UI 기록이다.
+
+| 시험 항목 | 완료한 확인 |
+|---|---|
+| NAND 설치·보존 | 앞32MiB 기록, kernel/rootfs readback SHA 일치, 노출 NOR8개 영역과 NAND 뒤96MiB 보존 해시 일치 |
+| 정상 부팅·저장 | ESC/TFTP 없는 순정 bootipq NAND 부팅3회, 재부팅 후 확인 파일·설정 유지 |
+| 유선·인터넷 | 실물 LAN4·WAN 각각1Gbps, LAN/WAN DHCP·DNS·NAT·인터넷 송수신 |
+| 무선 | 2.4GHz/5GHz 각각 실제 연결·양방향 데이터 전송·인터넷 송수신 |
+| 관리 화면 | Argon3.1.0, 한글 기본·English 선택 및 재부팅 유지 검사, 대역 이름 표시 사용자 화면 확인 |
+| LED·시간 | WAN/LAN4 점등·점멸 사용자 확인, 두 무선 대역의 공용 LED 밝기/활동 시험, NTP 동기화 |
+
+상세 근거: [NAND 설치·부팅·저장·무선 시험](OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md), [WAN·LAN4·LED·시간·화면 후속 시험](POST_INSTALL_SETTINGS_20261027.md).
+
+위 완료 이력의 대상은 기존 실기 설치 이미지와 후속 설정이다. **공개 r1은 이를 바탕으로 개인 인증 정보와 고정 MAC을 제거해 새로 빌드한 파일이며, 그 파일 자체의 실기 재설치·부팅 검증은 아직 확인 전**이다. 전체 순정 설치 재현·물리 전원 재인가·나머지 LAN 포트·장기 안정성·복원 시험은 아래 한계에 명시한다.
+
 ## 다운로드
 
 **[설치 패키지 ZIP 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/download/v25.12.6-ti04-r1/ti04-openwrt-25.12.6-r1-install.zip)** · **[릴리스와 개별 파일](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/v25.12.6-ti04-r1)** · **[처음부터 설치하기](../INSTALLATION.md)**

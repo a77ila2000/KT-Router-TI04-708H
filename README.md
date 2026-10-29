@@ -4,9 +4,11 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 
 **[⬇ 설치 이미지·도구 ZIP 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/download/v25.12.6-ti04-r1/ti04-openwrt-25.12.6-r1-install.zip)** · **[GitHub 릴리스](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/v25.12.6-ti04-r1)** · **[설치 순서](INSTALLATION.md)**
 
-> **25.12.6-ti04-r1 공개 시험판 — 새 배포본은 오프라인 검증 완료, 실기 부팅 전**
+> **실제 TI04 공유기 1대에 설치·기능 테스트 완료 — 공개 r1은 추가 실기 검증 전**
 >
-> RAM 설치 FIT·NAND UBI·자기 NOR 환경 패처/4KiB 기록기·NAND 백업/검증·TFTP/HTTP·범위 검사 설치기·SHA256과 빌드 소스를 제공합니다. 개인 계정/키/고정 MAC은 복제하지 않습니다. 기존 개인용25.12.6으로 실기1대 성공한 결과와 **새 공개 이미지의 미완료 실기 시험**을 [릴리스 설명](docs/PUBLIC_RELEASE_R1.md)에 구분합니다. Code → Download ZIP은 소스만 받으므로 위 설치 패키지를 받으세요.
+> OpenWrt25.12.6을 실제 공유기 NAND에 설치하고 정상 부팅3회·설정 유지·LAN4/WAN·2.4GHz/5GHz 통신을 확인했습니다. Argon/한글·영문 선택과 LED 후속 시험도 완료했습니다. [실기 시험 완료 항목](docs/PUBLIC_RELEASE_R1.md#공유기-실기-설치테스트-완료)을 확인하세요.
+>
+> 공개 r1은 개인 계정/키/고정 MAC을 제거해 새로 만든 배포 이미지입니다. RAM FIT·NAND UBI·환경 패처/4KiB 기록기·백업/검증·전송/설치 도구·SHA256과 소스를 제공합니다. **새 공개 파일 자체의 재설치·부팅 시험은 아직 확인 전**입니다. Code → Download ZIP은 소스만 받으므로 위 설치 패키지를 받으세요.
 
 ## 처음 방문한 사용자의 읽는 순서
 
