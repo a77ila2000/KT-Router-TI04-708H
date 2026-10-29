@@ -65,5 +65,6 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 | [설치 제약 분석](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md) | 제조사 U-Boot/FIT/파티션 설명 |
 | [하드웨어·미검증 아이디어](RESEARCH_NOTES.md) | 기존 README 원문 보존, 설치 순서와 구분 |
 | [개발 인수인계](docs/HANDOFF.md) | 배포 작업을 이어갈 개발자용 |
+| **[순정 8801 관리자 역공학 노트 (미검증)](docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)** | 순정 펌웨어 8801 포트, `ktadmin` 인증 알고리즘 및 웹 펌웨어 업그레이드 분석 |
 
 미검증 실험 아이디어와 과거 실패 기록을 보존합니다. 원본 NOR/NAND·ART·계정·SSH 키·개인용 이미지·전체 로그는 공개하지 않습니다. 공개 설치 이미지는 공식 구성요소에서 새로 만들었습니다.
