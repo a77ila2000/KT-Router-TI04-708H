@@ -1,211 +1,176 @@
-# TI04-708H OpenWrt 설치 안내
+# TI04-708H 설치 — 공개 시험판 r1
 
-목적은 같은 보드의 사용자가 **검증된 파일과 절차로 OpenWrt25.12.6을 설치하고, 부팅·저장·통신까지 확인하는 것**이다. 시행착오를 재현하는 순서가 아니라 최종 성공 조건을 기준으로 정리했다.
+**[설치 패키지 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/download/v25.12.6-ti04-r1/ti04-openwrt-25.12.6-r1-install.zip)** · [파일/검증 범위](docs/PUBLIC_RELEASE_R1.md) · [빌드 소스](firmware/BUILD.md)
 
-> **현재 배포 상태: 실기1대 성공, 공개 설치 패키지 준비 전.** 이 저장소에는 설치 이미지·장비별 환경 패치 도구·NAND 설치기가 아직 배포되지 않았다. 아래 단계에서 요구하는 파일과 검증 도구가 없으면 기록 단계로 진행하지 않는다. 기존 보고서에 있는 해시는 작성자 장비의 비공개 산출물 식별값이며 다운로드 링크가 아니다. 공개 릴리스 없이 이 문서만으로 순정 장비 설치를 완료할 수는 없다.
+대상: **allRadio TI04-708H / WGHE010100**, IPQ4018/256MiB, U33 GD25Q16CSIG(C8 40 15,2MiB), Macronix128MiB SPI NAND(page2048/OOB64/erase131072), 제조사 U-Boot2012.07. 비슷한 KT 모델이나 불량 NAND 블록이 있는 장비는 이번 도구의 지원 범위 밖이다.
 
-## 1. 적용 대상과 설치 경로
+**새 공개 이미지/범용 도구는 오프라인 검증만 마쳤으며 아직 실기 기록·부팅 전이다.** 기존 개인용25.12.6의 실기 성공과 구분한다. [남은 검증](docs/PUBLIC_RELEASE_R1.md#검증과-한계)을 확인한다.
 
-확인된 대상은 **allRadio TI04-708H / WGHE010100(WGHE0101)** 한 대다.
+## 1. PC와 파일 준비
 
-| 확인 항목 | 이번 실기의 값 | 다를 때 |
-|---|---|---|
-| SoC / RAM | IPQ4018 / 256MiB | 다른 보드로 분류하고 진행 중단 |
-| SPI NOR | U33 GD25Q16CSIG, JEDEC `C8 40 15`, 2MiB | 칩·전압·레이아웃 재분석 |
-| SPI NAND | Macronix `MX35LFxGE4AB`, 128MiB | NAND 지원·geometry 재분석 |
-| NAND geometry | page2048 / OOB64 / erase131072바이트 | 이미지·백업 형식 재검토 |
-| 부트로더 | 제조사 U-Boot2012.07, 순정 bootipq | ESC 방식·FIT·파티션 규칙 재확인 |
+Windows PowerShell5.1, Python3.11 이상, CH341A/SOP8 클립,3.3V TTL UART, Ethernet 케이블, 별도 백업 저장소를 준비한다. [AsProgrammer2.1.2 공식 배포](https://github.com/nofeletru/UsbAsp-flash/releases/tag/v2.1.2)에서 WCH 드라이버와 `CH341DLL.DLL`을 준비한다. DLL/드라이버는 재배포하지 않는다. 지원 DLL의 SHA/서명 검사는 도구에 포함돼 있다.
 
-다른 KT 공급사의 KM08-708H/DV01-901H나 비슷한 IPQ40xx 보드는 대상에 포함하지 않는다. 외관 모델명이 같아도 보드·칩·부트로더·파티션을 확인한다.
+설치 ZIP을 예를 들어 `C:\ti04`에 푼다. 이하 PC 명령은 그 폴더에서 실행한다. `python --version`으로3.11 이상인지 확인한다. Python이 `py`로만 실행된다면 명령의 `python`을 `py -3`으로 바꾸고 CH341 기록 명령에는 `-Python py`를 추가한다.
 
-배포 가이드가 목표로 하는 경로는 다음과 같다.
-
-```text
-기기 식별 → NOR 독립 백업 → 자기 환경의 ESC2012 패치/전체 검증
-→ UART U-Boot → NAND 전체 백업 → 검증된 설치용 RAM 부팅
-→ 앞32MiB에 최종25.12.6 UBI 한 번 기록/검증
-→ NAND 자동 부팅/저장 확인 → 암호·Wi-Fi·언어/테마 설정
+```powershell
+cd C:\ti04
+python scripts\verify_release.py .
 ```
 
-**23.05.3을 NAND에 중간 설치하는 단계는 목표 경로에 넣지 않는다.** 설치 도구용 RAM이23.05.3 기반인 것과23.05.3 영구 설치는 다르다. 실제 개발 과정에서는23.05.3 설치 후25.12.6으로 전환했다. 위의 순정→25.12.6 전체 순서를 다른 순정 장비에서 처음부터 재현한 시험은 아직 없으며, 공개 릴리스 전 확인해야 한다.
+`PASS`가 필요하다. **Code → Download ZIP은 소스만 받는다.** 위 설치 패키지를 받는다. `.ubi`는 순정 관리자/LuCI 업로드용 파일이 아니다.
 
-## 2. 시작 전에 갖출 것
+## 2. 자기 NOR 독립 백업
 
-- 대상 보드와 맞는 CH341A·SOP8 클립/어댑터. NOR에 맞는 전원 및 신호 전압 확인. 이 실기의 GD25Q16C는3.3V 계열이며1.8V 어댑터를 무조건 끼우지 않는다.
-- 3.3V TTL USB–UART, 터미널 `115200 8N1`, DTR/RTS 비활성. RS-232 전압이나 USB5V를 UART 신호에 연결하지 않는다.
-- PC–TI04 실물 LAN1 Ethernet 연결, TFTP 서버, 별도 백업 저장소. 초기 설치 중 WAN/상위 공유기 연결은 분리한다.
-- 파일 역할·크기·SHA256, 대상 보드/geometry, 설치 범위, 부팅 config가 적힌 **실제 배포 manifest**.
-- 해당 manifest에 대응하는 설치용 RAM 이미지, 최종 NAND UBI, 원본을 보존하는 환경 패치 도구, 기록 전후 검증 기능이 있는 설치기.
+공유기 DC 전원·LAN·UART를 모두 분리하고 프로그래머/클립만 연결한다. 전원과 신호 전압을 확인한다. GD25Q16C는3.3V 계열이므로1.8V 어댑터를 무조건 끼우지 않는다. AsProgrammer를 닫는다.
 
-현재 누락된 배포 항목은 [8절](#8-공개-릴리스-완료-조건)에 표시했다. 다운로드 파일이 없는 자리를 다른 보드 이미지나 과거 실패 파일로 채우지 않는다.
+다음 도구는32비트 PowerShell을 사용한다. DLL 경로는 자기 PC에 맞게 바꾸고, 출력에는 **존재하지 않는 새 절대 경로**를 사용한다.
 
-프로그래머 작업은 공유기 전원·LAN·USB–TTL을 분리하고 한다. UART/정상 부팅으로 넘어갈 때는 프로그래머와 클립을 분리한 뒤 공유기 자체 전원을 사용한다. UART 어댑터의 VCC는 연결하지 않는다. CN1 관측 배선과 사진은 [하드웨어 기록](RESEARCH_NOTES.md#2-주요-부품-사양--사진실기-로그제조사-자료-대조)을 참고하되 자기 보드에서 다시 확인한다.
-
-## 3. NOR 백업과 UART 진입 준비
-
-### 3-1. NOR를 독립3회 읽는다
-
-U33을 식별한 뒤 Read만 수행해 각기 다른 파일로 저장한다. 같은 파일을 복사한 것은 독립 읽기가 아니다. 아래 도구는 파일만 비교하며 프로그래머를 조작하지 않는다.
-
-```sh
-python scripts/verify_dump.py --expected-size 2097152 dump/nor-read1.bin dump/nor-read2.bin dump/nor-read3.bin
+```powershell
+C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ch341_nor.ps1 -Mode Read -DllPath "C:\tools\AsProgrammer\CH341DLL.DLL" -OutputDirectory "C:\ti04-private\nor-original" -BoardUnpoweredAndOtherCablesRemoved
+python scripts\verify_dump.py --expected-size 2097152 C:\ti04-private\nor-original\nor-read1.bin C:\ti04-private\nor-original\nor-read2.bin C:\ti04-private\nor-original\nor-read3.bin
 ```
 
-통과 기준은 크기2,097,152바이트, 세 파일의 완전 일치, 비어 있거나 전부00/FF가 아닌 내용이다. 추가로 부트로더·환경·ART 경계를 확인하고 원본을 별도 매체에도 보관한다. 반복 일치는 유효한 원본이나 복원 성공의 단독 증명이 아니다.
+3회 읽기의 크기/내용이 일치해야 한다. `FFFFFF`, `000000`, 다른 JEDEC나 내용 불일치면 중단한다. 반복 일치만으로 칩/백업 유효성이 모두 증명되는 것은 아니다. 자기 원본을 별도 저장소에도 보관하고 공개하지 않는다.
 
-### 3-2. 자기 NOR 환경에서 bootdelay만2012로 바꾼다
+## 3. 자기 환경만 ESC2012 패치
 
-이번 보드에서 확인한 환경은 `[0x0E0000,0x0F0000)`의64KiB다. 앞4바이트는 little-endian CRC32이며 CRC 대상은 이어지는65,532바이트다. 변경은 `bootdelay=0` → `bootdelay=2012`다. `2012`는 제조사 ESC 모드 선택값이며 대기 초가 아니다.
+```powershell
+python scripts\patch_nor_env.py --source C:\ti04-private\nor-original\nor-read1.bin --read2 C:\ti04-private\nor-original\nor-read2.bin --read3 C:\ti04-private\nor-original\nor-read3.bin --out C:\ti04-private\patch
+```
 
-환경의 다른 키/값과 순서, 부트로더·ART를 유지하고 CRC를 다시 계산해야 한다. 이 실기에서는 바뀐31바이트가 첫4KiB `[0x0E0000,0x0E1000)`에 모두 들어갔다. **다른 사용자의 덤프에서도31바이트/4KiB로 끝난다고 가정하지 않는다.** 생성한 자기 후보가 실제로 그 범위를 지키는지 검사한다. 이미 패치됐거나 CRC/레이아웃이 다르면 기존 패치를 무조건 반복하지 않는다.
+CRC가 유효하고 `bootdelay=0`인 환경만 받는다. 다른 키/값/순서를 보존하며 `bootdelay=2012`와 CRC만 바꾼다. 변경이 `[0xE0000,0xE1000)`4KiB를 넘으면 거부한다.2012는 제조사 ESC 모드 선택값이다.
 
-검증된 기록 방법은 해당4KiB 섹터의 제한된 erase/program과 그 뒤 **전체2MiB readback 비교**였다. 기록 범위를 설정할 수 없는 도구에서 버튼 이름만 보고 전체 NOR 쓰기를 대신 실행하지 않는다. 작성자의 전체 NOR/환경 이미지를 다른 기기에 복제하지 않는다.
+공유기는 계속 무전원/프로그래머만 연결한 상태로 둔다. 아래 기록기는4KiB 한 섹터만 erase/program한다. 전체 erase·상태 레지스터 변경·unprotect는 구현하지 않았다.
 
-**전원을 켜기 전에 통과해야 할 항목:**
+```powershell
+C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\ch341_nor.ps1 -Mode WriteEnv -DllPath "C:\tools\AsProgrammer\CH341DLL.DLL" -Source C:\ti04-private\nor-original\nor-read1.bin -Read2 C:\ti04-private\nor-original\nor-read2.bin -Read3 C:\ti04-private\nor-original\nor-read3.bin -Candidate C:\ti04-private\patch\own-nor-esc2012.bin -OutputDirectory C:\ti04-private\nor-write -BoardUnpoweredAndOtherCablesRemoved
+```
 
-- 기록한 섹터가 자기 후보와 일치하고 환경 CRC가 유효함.
-- 전체 NOR readback이 자기 최종 후보와 일치함.
-- 허용된 환경 섹터 밖이 자기 원본과 같고, 장치를 새로 열어 읽은 결과도 일치함.
+live NOR가 자기 원본과 다르면 거부한다. 성공 뒤에도 아직 전원을 켜지 않는다.2절 Read를 새 폴더 `C:\ti04-private\nor-after`로 다시 실행해3회 일치를 확인하고 다음을 실행한다.
 
-첫 수동 기록 때 전원 전 Verify를 확인하지 못해 다음 부팅에서 `bad CRC`가 발생했다. 이 확인을 생략한 채 다음 단계로 넘어가지 않는다.
+```powershell
+python scripts\patch_nor_env.py --source C:\ti04-private\nor-original\nor-read1.bin --read2 C:\ti04-private\nor-original\nor-read2.bin --read3 C:\ti04-private\nor-original\nor-read3.bin --verify-readback C:\ti04-private\nor-after\nor-read1.bin
+```
 
-### 3-3. UART에서 U-Boot를 확인한다
+전체2MiB 비교와 CRC 검사가 통과해야 한다. 첫 수동 기록 때 전원 전 Verify를 확인하지 않아 `bad CRC`로 실패한 이력이 있다. 이 검사를 생략하지 않는다. 생성된 자기 NOR/패치/receipt는 다른 기기에 사용하지 않는다.
 
-프로그래머/클립을 분리한 뒤 UART를 연결한다. 이번 실기는 사각 패드를①로 셀 때②→어댑터RX, ③←어댑터TX, ④→GND였고①은 미연결이었다. 자기 보드 배선 확인을 우선한다.
+## 4. UART와 주소 준비
 
-전원 인가 때 `Press ESC to stop autoboot: 1` 구간에 ESC `0x1B`를 보낸다. 짧은 폴링 창 때문에 이 구간에서 반복 송신하되, `(IPQ40xx) #`를 확인하면 자동 송신을 멈춘다. 이 장비는 숫자·Enter·Space 또는 `@tnie`를 계속 보내는 방식이 최종 성공 경로가 아니다.
+CH341A와 클립을 분리한다. UART115200 8N1, DTR/RTS 끔, **VCC 미연결**로 연결한다. 관측 CN1은 사각① 기준②→어댑터RX,③←TX,④→GND였으나 자기 보드 배선 확인을 우선한다. [하드웨어 기록](RESEARCH_NOTES.md)을 참고한다.
 
-U-Boot 프롬프트에서 다음을 한 줄씩 확인한다.
+전원 인가 직후 ESC `0x1B`를 짧게 반복해 `(IPQ40xx) #`가 뜨면 송신을 멈춘다. 터미널에서:
 
 ```text
 version
-printenv bootdelay
 setenv debug_mode on
-help
-smeminfo
+nand device
+nand bad
 ```
 
-`debug_mode=on`은 제한된 도움말/NAND/TFTP 명령을 현재 세션에서 쓰기 위한 설정이다. 이 목적으로 `saveenv`를 실행하지 않는다. `bad CRC`·다른 부트로더·프롬프트 미확인 상태면 NAND 설치를 시작하지 않는다.
+TI04-708H/U-Boot2012.07, Device1 nand1,2048/64/131072, 불량 블록 없음이 기준이다. `saveenv`는 하지 않는다.
 
-## 4. NAND 전체 백업과 설치용 RAM 부팅
+WAN은 분리하고 PC–LAN을 직접 연결한다. 실물 LAN4는 현재 Linux 통신이 확인된 포트다. PC 유선 어댑터를 수동 `192.168.1.2/24`로 설정한다. 아래는 **PC192.168.1.2 / 공유기192.168.1.1** 예시다. 실제 주소/COM/DLL 경로를 명령과 일치시키고 다른 같은 대역 연결은 피한다. 설치 뒤 PC는 DHCP 자동으로 복구한다.
 
-### 4-1. 자기 NAND를 백업한다
+## 5. NAND 전체 백업
 
-순정 U-Boot에서 다음 두 형식을 별도로 보관했다. 백업 도구는 읽기 범위와 각 조각 전송 무결성을 확인해야 한다.
+PC 첫 PowerShell에서 TFTP 서버를 연다. 방화벽은 해당 프로세스/분리된 유선 연결의 UDP69와 전송용 UDP 포트를 허용한다. 방화벽 전체를 끄지 않는다.
 
-| 형식 | 전체 크기 | 검증 기준 |
-|---|---:|---|
-| ECC 처리 main | 134,217,728바이트 | main128MiB 전체 coverage, 조각 크기·CRC/SHA·조립 SHA |
-| raw+OOB | 138,412,032바이트 | 2048+64바이트/페이지, 원래 OOB 포함, 별도 manifest |
+```powershell
+python scripts\tftp_server.py --bind 192.168.1.2 --peer 192.168.1.1 --output C:\ti04-private\nand-chunks --read ram.fit=ti04-25.12.6-ram-installer.itb
+```
 
-`nand read.raw`의 길이 인자는 이 제조사 부트로더에서 페이지 수였다. byte 수를 그대로 넣지 않는다. 두 백업은 ECC 처리 여부 때문에 내용이 다를 수 있으며 같은 복원 형식으로 취급하지 않는다.2MiB NOR 백업만으로 NAND까지 백업된 것은 아니다. 실제 복원 시험은 아직 없다.
+UART 터미널만 닫아 COM을 해제한다. 두 번째 PowerShell에서 **실제 COM 번호**로 바꿔 실행한다.
 
-### 4-2. 자기 파티션 경계를 대조한다
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup_nand.ps1 -Port COM7 -ServerIP 192.168.1.2 -RouterIP 192.168.1.1 -Chunks C:\ti04-private\nand-chunks
+```
 
-| 장치 | 확인된 영역 | 최종 설치에서의 역할 |
-|---|---|---|
-| NOR | 환경 `0x0E0000–0x0F0000`, APPSBL `0x0F0000–0x170000`, ART `0x170000–0x180000` | 환경 준비 뒤에는 추가 기록하지 않음 |
-| NAND | `0x0000000–0x2000000` | OpenWrt 설치 대상 **앞32MiB** |
-| NAND | `0x2000000–0x8000000` | 보존 대상 **뒤96MiB**, 설치용 RAM에서도 쓰기 비활성 |
+U-Boot `nand read`/`read.raw`→RAM CRC→TFTP만 실행한다. `read.raw`의200은512페이지다. main128개/raw128개 조각을 받는다. 서버 제한 시간30분이 만료되면 같은 완료 파일을 덮어쓰지 말고 새 백업 실행으로 다시 검증한다. 실패/스킵/시간 초과면 중단한다.
 
-128MiB 전체를 지우지 않는다. 이 장비의 뒤96MiB에는 다른 UBI sequence의 데이터가 관측됐다.
+```powershell
+python scripts\verify_backups.py --chunks C:\ti04-private\nand-chunks --nor-readback C:\ti04-private\nor-after\nor-read1.bin --out C:\ti04-private\verified-backup
+```
 
-### 4-3. 배포본의 설치용 RAM 이미지를 실행한다
+ECC main134,217,728바이트와 raw+OOB138,412,032바이트를 조립하고 CRC/SHA를 검사한다. `own-backup-receipt.json`은 자기 보존 영역 해시다. 백업/receipt를 별도 저장소에도 복사한다. raw와ECC main은 차이가 있을 수 있으며 같은 복원 형식이 아니다. 실제 복원 시험은 아직 없다.
 
-TFTP 서버와 PC 주소를 정한 뒤 **부트로더 단계에서 PC 주소가 유지되는지** 확인한다. Linux DHCP로 얻었던 주소가 재부팅 중 사라져 TFTP bind가 실패한 사례가 있었다. 서버를 올린 주소와 `serverip`는 같아야 한다. 작성자의 IP/COM 번호를 복사하지 않는다.
+## 6. 설치용 RAM 부팅
 
-확인된 순정 U-Boot는 LZMA를 실행하지 못하고 gzip 출력8MiB 한도가 있다. 설치용 RAM FIT는 이에 맞는 비압축 kernel/외부 CPIO, 명시적 load와 config를 포함해야 한다. **이 저장소에는 아직 공개 RAM FIT가 없으므로 이 문서에서 임의 TFTP 파일명·부팅 주소를 제시하지 않는다.** 파일명·전송 크기·CRC·load/config 명령은 배포 manifest와 일치해야 한다.
+백업기가 종료되면 UART 터미널을 다시 연다. TFTP 서버 실행 여부를 확인한다. 만료됐다면5절 명령의 `--output`을 다른 새 경로로 바꿔 다시 실행한다. U-Boot에서:
 
-RAM 부팅 후 실제 kernel/model, tmpfs root, 플래시 범위와 flags, UBI 미attach를 확인한다. 읽기 전용 시험용 RAM과 **앞32MiB만 쓰기 가능한 설치용 RAM**은 다른 역할이다. 읽기 전용 이미지를 임의로 수정해 설치 도구를 강행하지 않는다.
+```text
+setenv ipaddr 192.168.1.1
+setenv serverip 192.168.1.2
+setenv netmask 255.255.255.0
+setenv initrd_high 83f00000
+setenv fdt_high 83e00000
+setenv bootargs console=ttyMSM0,115200 rdinit=/init root=/dev/ram0 loglevel=6
+tftpboot 84000000 ram.fit
+iminfo 84000000
+```
 
-## 5. 최종25.12.6을 NAND에 기록한다
+전송 크기가 `RAM_BOOT.json`의bytes/size_hex와 맞고 FIT hash 검사가 통과해야 한다. `crc32 84000000 SIZE_HEX`를 실행해 그 파일의crc32와 비교한다. **SIZE_HEX는 실제16진수 값으로 바꾼다.** 일치하면:
 
-이 단계는 manifest에 맞는 설치기와 자기 백업이 준비된 경우에만 수행한다. 과거 보고서의 `mtd9` 번호나 원시 erase/write 명령을 복사하는 방식은 배포 절차로 사용하지 않는다.
+```text
+bootm 84000000#config@1
+```
 
-### 기록 전 필수 검사
+RAM Linux가 뜨면 Enter로 셸에 진입한다. `cat /etc/ti04-installer-release`는 `25.12.6-ti04-r1`, mount의 `/`는tmpfs여야 한다. NAND가 자동 attach돼 있으면 설치기는 거부한다.
 
-| 검사 | 반드시 맞아야 하는 조건 |
+## 7. 이미지 전달과 사전 검사
+
+PC에서 TFTP를 종료하고 HTTP 서버를 연다. **IMAGE_SHA256은manifest.json의files.ubi.sha256 64글자로 바꾼다.** 서버는 아래 세 파일만 지정 peer에20분간 제공한다.
+
+```powershell
+python scripts\serve_image.py --bind 192.168.1.2 --peer 192.168.1.1 --file ti04-25.12.6-first32m.ubi --sha256 IMAGE_SHA256 --manifest manifest.json --receipt C:\ti04-private\verified-backup\own-backup-receipt.json
+```
+
+**공유기 UART 셸에서**:
+
+```sh
+mkdir /tmp/ti04-bundle
+uclient-fetch -O /tmp/ti04-bundle/ti04-25.12.6-first32m.ubi http://192.168.1.2:8000/install.ubi
+uclient-fetch -O /tmp/ti04-bundle/manifest.json http://192.168.1.2:8000/manifest.json
+uclient-fetch -O /tmp/own-backup-receipt.json http://192.168.1.2:8000/own-backup-receipt.json
+/usr/sbin/ti04-install --check /tmp/ti04-bundle /tmp/own-backup-receipt.json
+```
+
+`TI04_ALL_INSTALL_GUARDS_PASS`가 필요하다. 실제 IP가 다르다면 서버bind/peer와 다운로드 주소를 맞춘다. 오류를 피하려고 guard를 지우지 않는다.
+
+## 8. 앞32MiB 기록/검증
+
+**앞32MiB의 기존 데이터를 지우는 명령이다.** 자기 백업을 별도 보관하고7절을 통과한 뒤 실행한다.
+
+```sh
+/usr/sbin/ti04-install --apply /tmp/ti04-bundle /tmp/own-backup-receipt.json WRITE-FIRST32M
+```
+
+RAM marker/root/board, 동적 MTD 이름·offset·size·geometry·flags·불량 블록·UBI 미attach, 파일SHA와 RAM 내manifest, 자기 NOR8개 영역/NAND뒤96MiB 해시를 검사한다. 앞32MiB만 `ubiformat`하고 kernel/rootfs 볼륨 readback SHA와 보존 해시를 다시 검사한다. rootfs_data는남는공간으로 확장된다. 같은 RAM 세션의 재기록은 거부한다.
+
+**erase/program 중 Ctrl+C/전원 차단을 하지 않는다.** 오류면 RAM과 자기 백업을 보존한다. 성공 메시지는 `TI04_WRITE_READBACK_PRESERVATION_PASS`다. 아직 NAND 부팅 확인 전이다.
+
+## 9. NAND 자동 부팅과 첫 설정
+
+검증 성공 뒤 UART 셸에서 `reboot`한다. ESC/TFTP 없이 stock bootipq의config@5와 OpenWrt25.12.6/Linux6.12.112 진입, `/rom`SquashFS·`/overlay`UBIFS·overlayfs root를 확인한다. PC를 DHCP 자동으로 복구하고 [LuCI](http://192.168.1.1/)에 접속한다.
+
+1. 초기 root 암호는 비어 있다. UART/분리된 LAN에서 자기 암호를 바로 설정한다. host key/웹 인증서는 장비에서 생성한다.
+2. `/etc`에 시험 파일을 만들고 정상 재부팅 뒤 내용이 유지되는지 확인한다.
+3. Argon/한국어가 기본이다. **시스템 → 시스템 → 언어 및 스타일 → English**로 영문 전환한다.
+4. Wi-Fi는두대역 모두 꺼져 있다. 자기 국가·SSID·WPA 암호를 설정하고 **2.4GHz Wi-Fi / 5GHz Wi-Fi**를 구분해 켠다.
+5. 연결한 LAN의통신/LED, 각 무선의실제 양방향 전송을 확인한 뒤 WAN의DHCP·DNS·NAT를 확인한다.
+6. **네트워크 → 최대 송신 출력**은 현재 드라이버의자동/수동 상한이다.35dBm 고정 패치는 아니다.
+
+일반 sysupgrade/다른 보드 이미지는 사용하지 않는다. 초기화 버튼 GPIO는미확정이므로 비활성화돼 있다. 새 공개 빌드의물리 전원 재인가·복원·장기 시험은남아있다.
+
+## 문제가 생기면
+
+| 증상 | 조치 |
 |---|---|
-| 실행 환경 | TI04 설치용 RAM, tmpfs root; 현재 NAND root에서 직접 포맷하지 않음 |
-| 설치 대상 | NAND, offset0, size33,554,432, erase131,072바이트, 쓰기 가능 |
-| 보존 대상 | 뒤96MiB와 NOR가 쓰기 비활성, 대상 UBI 미attach |
-| 백업 | 자기 NOR/NAND 백업 무결성 확인, 자기 보존 영역의 설치 전 SHA 저장 |
-| 파일 전송 | PC 파일과 RAM 파일의 크기·SHA256이 해당 릴리스 manifest와 일치 |
-| 이미지 구성 | 순정 bootipq용 FIT config, 비압축 kernel, 파티션 이름/root 인자 보완, 올바른 UBI geometry |
+| JEDEC/CRC/readback 불일치 | 무전원 유지, 자기 원본·접촉/전압·실제 칩부터 확인 |
+| ESC 없음/bad CRC | NAND 단계 중단, 자기 NOR CRC와 전체readback부터 확인 |
+| 명령이 에코만 남음 | U-Boot 세션debug_mode=on 확인, saveenv하지 않음 |
+| TFTP 없음 | 케이블·PC고정IP·bind/peer/serverip·방화벽·서버 만료 확인 |
+| guard 실패 | 오류가 지목한 실제 값 확인, 다른 기기의해시/MTD값으로 바꾸지 않음 |
+| QCA8075/root mount 오류 | 공개 FIT/manifest/hash 일치 확인, 과거 실패 kernel/다른 DTB를 섞지 않음 |
+| 기록 후 검증 실패 | 재부팅 강행/전체 플래시 덮어쓰기 없이 RAM과 자기 백업 보존 |
 
-기록은 **앞32MiB UBI 한 번**으로 kernel/rootfs/rootfs_data를 구성한다. 이번25.12.6 이미지에서는 kernel105 LEB/rootfs37 LEB와 나머지 rootfs_data를 사용했다. kernel이 기존23.05.3의96 LEB 볼륨보다 크므로 기존 kernel 볼륨에만 덮어쓰는 방법은 사용하지 않는다.
-
-설치기는 오류 종료 코드·명령별 완료·시간 초과를 기록하고 파일/범위 검사 실패 시 기록 전에 종료해야 한다. UART 긴 줄 전송 누락 때문에 짧은 줄로 나눠 전송한 뒤 guard 파일 자체의 SHA도 확인했다. erase/program 진행 중에는 Ctrl+C나 전원을 끊지 않는다.
-
-### 기록 후 통과 기준
-
-- 설치 대상에만 UBI가 attach되고 볼륨 이름/크기가 맞음.
-- 실제 kernel/rootfs 볼륨 readback SHA가 해당 이미지 manifest와 일치함.
-- 자기 NOR 보존 영역과 뒤96MiB의 설치 전후 SHA가 같음.
-- 기록/검증 명령이 모두 성공하고 NAND 부팅으로 전환하기 전 sync가 끝남.
-
-UBI 전달 파일 전체의 SHA와 부팅 후 NAND 앞32MiB 전체의 SHA를 같아야 하는 값으로 혼동하지 않는다. UBI/UBIFS의 동작 메타데이터·overlay는 부팅 중 변한다. kernel/rootfs payload와 보존 영역을 각각 검증한다. Linux에 노출된 NOR8개 파티션의 합은1.5MiB이므로 그 SHA 검사를 전체2MiB readback이라고 부르지 않는다.
-
-## 6. 설치 완료 판정
-
-전송·기록 성공만으로 설치 완료라고 표시하지 않는다. 아래까지 확인한다.
-
-| 항목 | 통과 기준 |
-|---|---|
-| 정상 부팅 | ESC/TFTP 없이 순정 bootipq에서 NAND kernel의 `config@5` 선택 후 사용자 환경 진입 |
-| 버전 | `ubus call system board`에서 의도한 OpenWrt/kernel/model 표시 |
-| root/overlay | `/rom` SquashFS 읽기 전용 + `/overlay` UBIFS 쓰기 가능, overlayfs root |
-| 저장 유지 | 임시 RAM 파일과 구분되는 `/etc` 확인 파일을 만든 뒤 재부팅해 같은 내용 유지 |
-| 관리 통신 | 연결한 LAN에서 DHCP·ping·LuCI 응답, 정상 링크 속도 |
-| 무선 | 각 대역 연결·양방향 데이터/해시 확인. PHY 목록만으로 송수신 성공 판정하지 않음 |
-| 보존 | 기록 전후 자기 NOR/NAND 보존 해시 일치 |
-
-현재 장비에서는25.12.6 정상 NAND 부팅3회, 저장 유지, 유선 관리/DHCP, 두 대역 각8MiB 양방향 전송이 통과했다.2026-10-27 추가 시험에서 WAN DHCP·DNS·NAT/인터넷, 실물 LAN4 관리, 두 대역 인터넷 송수신도 확인했다. **물리 전원 재인가, 나머지 LAN 케이블 시험, RF 출력·최대 성능·장기 안정성·실제 복원은 미검증**이다. [설치 후 기록](docs/POST_INSTALL_SETTINGS_20261027.md)에 확인 범위를 구분한다.
-
-## 7. 첫 설정과 문제가 생겼을 때
-
-1. root 암호를 직접 설정한다. 개발 실기의 초기 암호는 비어 있었다. 다른 사람의 root 인증 정보나 SSH host key를 복제하지 않는다.
-2. Wi-Fi는 기본 disabled를 기준으로 자기 국가/SSID/WPA 암호를 설정하고 원하는 대역을 켠다. 두 라디오는 시험 후 다시 disabled로 복구해 놓은 상태다.
-3. Argon/한글은 NAND 기본 UBI 기록 뒤 **별도로 설치한 패키지와 overlay 설정**이다. 과거 UBI 해시만 보고 테마까지 포함됐다고 가정하지 않는다. 배포 manifest에서 포함 여부를 확인한다. 실기에서는 Argon3.1.0·공식25.12.6 한국어 번역을 적용하고 재부팅 유지까지 확인했다.
-4. 영문 전환: **시스템 → 시스템 → 언어 및 스타일 → 언어 → English → 저장 및 적용**.
-5. 일반 LuCI sysupgrade/다른 보드 이미지를 사용하지 않는다. 이 포트는 기존 압축/FIT/파티션 제약 때문에 일반 sysupgrade를 차단했다.
-6. 시간이 맞지 않으면 NTP 서비스/서버 구성을 확인한다. [기존 서버 구성을 보존하는 NTP 적용법](device-settings/README.md#누락된-ntp-기본값-보완)을 제공한다.
-7. 포트·무선 활동 LED는 [별도 LED 설정](device-settings/README.md)을 참고한다. 번호 매핑을 확인한 TI04만 대상으로 한다.
-
-선택 기능: [관리자 출력 프로필 확장](luci/README.md)을 설치하면 **네트워크 → 최대 송신 출력**에서 대역별 최대 출력(자동) 또는 수동 상한을 선택할 수 있다. 현재 드라이버를 사용하며 기존 UBI에는 포함되지 않은 별도 파일이다. 자동은 수동 상한을 해제하는 기존 동작이고, 구형 high-power35dBm 패치를 적용하는 기능이 아니다.
-
-| 증상 | 다음 조치 |
-|---|---|
-| `bad CRC` / ESC 모드 없음 | NAND 기록 중단. 자기 NOR 원본/후보/readback·환경 CRC부터 확인 |
-| help/NAND/TFTP가 에코만 남음 | U-Boot 세션의 `debug_mode=on` 확인. 이 목적으로 saveenv하지 않음 |
-| TFTP 응답 없음 | 케이블/링크·PC 주소·서버 bind·serverip·파일명/방화벽을 확인. 전송 실패 상태에서 기록하지 않음 |
-| QCA8075 probe 실패 / 유선 미동작 | 수정된 PHY-package DTB와 일치하는지 확인. Generic PHY 상태를 통과로 표시하지 않음 |
-| root mount panic | 최종 이미지/config/DTB를 확인. 앞32MiB 이름 `rootfs`와 최종 ubiblock root 보완 필요. 과거 실패 kernel을 재사용하지 않음 |
-| 기록/readback 해시 불일치 | NAND 정상 부팅으로 진행하지 않고 설치 환경·로그·자기 백업을 보존 |
-
-복구는 실패 지점과 자기 백업 형식에 따라 다르다. 부팅이 안 된다고 전체 NOR/128MiB NAND를 임의로 덮어쓰지 않는다. 완전 복원 실기 검증은 아직 없으며 미검증 복원 명령을 설치 안내에 넣지 않았다.
-
-## 8. 공개 릴리스 완료 조건
-
-**2026-10-27 기준 GitHub Releases와 이 저장소에서 아직 충족하지 못한 배포 항목이다.** 후속 LED/NTP/UI 소스 추가나 문서 정리만으로 완료 처리하지 않는다.
-
-- [ ] 순정·동일 보드의 자기 NOR를 검사하고 다른 환경 값을 보존하는 패치 도구와 범위/CRC 검증. 현재 로컬 패처는 작성자 원본 SHA에 고정돼 있다.
-- [ ] 보드별 보정값/MAC·계정·SSH host key를 다른 사용자에게 복제하지 않는 RAM/최종 이미지 또는 재현 가능한 빌드 경로. 현재 성공 이미지는 장비 인증 정보를 보존한 개인용이다.
-- [ ] 설치용 RAM FIT + 최종 NAND UBI + 정확한 크기/SHA256/역할/geometry/config의 공개 manifest와 다운로드.
-- [ ] COM/IP/경로를 사용자 환경에 맞게 지정하고, 자기 보존 해시를 기준으로 검사하는 설치기. 현재 로컬 설치기는 작성자 장비·백업·경로·해시에 고정돼 있다.
-- [ ] 첫 사용자 관점의 NOR/NAND 백업·파일 검증·TFTP·앞32MiB 기록/readback·부팅 확인 명령을 실제 배포 파일명으로 대조.
-- [ ] 다른 순정 장비에서 이 안내만 따라 처음부터25.12.6까지 재현. 물리 전원 재인가·필수 WAN 동작·복구 절차의 시험 결과 명시.
-
-- [ ] 별도 적용한 Argon/언어·LED/NTP·관리자 출력/대역 표시를 배포 구성과 manifest에 반영. 실기에서 완료한 대역 표시를 포함해 후속 설정의 재부팅과 새 배포본 포함 여부 확인.
-
-검증이 끝나면 공개 manifest에 대응하는 설치 명령을 이 안내에 추가하고 배포 상태를 갱신한다. 실패했던 후보 이미지나 작성자의 전체 플래시 복제본을 대신 배포하지 않는다.
-
-## 근거 자료
-
-- [최신 WAN·LED·NTP·UI 설정 결과](docs/POST_INSTALL_SETTINGS_20261027.md)
-
-- [최종25.12.6 NAND·Wi-Fi·Argon 검증 결과](docs/OPENWRT_25_12_6_NAND_WIFI_UI_20261026.md)
-- [25.12.6 RAM/PHY 수정 시험](docs/OPENWRT_25_12_6_RAM_TEST_20261026.md)
-- [문제별 상세 실패·수정 이력](docs/EXPERIMENT_LOG_20261026.md)
-- [부트로더·파티션·기존 이미지 제약 분석](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)
-- [하드웨어 사양·사진·미검증 아이디어 보존본](RESEARCH_NOTES.md)
+[실패·수정 이력](docs/EXPERIMENT_LOG_20261026.md), [포팅 제약](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md), [미검증 아이디어](RESEARCH_NOTES.md)를 보존한다. 실기 검증 전인 완전 복원 명령을 추측해 제공하지 않는다. 공개 이슈에는백업·receipt·계정/키·MAC/SSID·전체로그를 올리지 않는다.

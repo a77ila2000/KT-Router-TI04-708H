@@ -1,0 +1,20 @@
+#!/bin/sh
+# Never clone the author's Ethernet identity. Derive local MACs from OWN ART.
+set -eu
+art=''
+for path in /sys/class/mtd/mtd[0-9]*; do
+ [ -f "$path/name" ] || continue
+ [ "$(cat "$path/name")" = ART ] && art="/dev/${path##*/}"
+done
+[ -n "$art" ] || exit 1
+h=$(sha256sum "$art" | cut -d' ' -f1)
+[ "${#h}" = 64 ] || exit 1
+# Distinct locally administered unicast MACs; no factory environment write.
+lan=$(printf '02:%s:%s:%s:%s:%s' "$(echo "$h" | cut -c1-2)" "$(echo "$h" | cut -c3-4)" "$(echo "$h" | cut -c5-6)" "$(echo "$h" | cut -c7-8)" "$(echo "$h" | cut -c9-10)")
+wan=$(printf '06:%s:%s:%s:%s:%s' "$(echo "$h" | cut -c1-2)" "$(echo "$h" | cut -c3-4)" "$(echo "$h" | cut -c5-6)" "$(echo "$h" | cut -c7-8)" "$(echo "$h" | cut -c9-10)")
+uci set network.@device[0].macaddr="$lan"
+uci -q delete network.ti04_wan_device || :
+uci set network.ti04_wan_device=device
+uci set network.ti04_wan_device.name=wan
+uci set network.ti04_wan_device.macaddr="$wan"
+uci commit network

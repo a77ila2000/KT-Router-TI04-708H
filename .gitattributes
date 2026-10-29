@@ -1,2 +1,7 @@
 device-settings/** text eol=lf
 luci/patches/** text eol=lf
+firmware/** text eol=lf
+scripts/ch341/** text eol=lf
+scripts/ch341_nor.ps1 text eol=lf
+scripts/backup_nand.ps1 text eol=lf
+scripts/*.py text eol=lf
