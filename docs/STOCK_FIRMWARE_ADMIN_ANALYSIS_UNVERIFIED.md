@@ -5,6 +5,8 @@
 > 본 문서는 KT 순정 펌웨어(v1.4.0) NAND 덤프(`nand-main-ecc.bin`)에서 추출한 rootfs, 바이너리(`/bin/board`, `/bin/rc`, `/usr/bin/php-cgi`), 그리고 웹 애플리케이션 프레임워크 소스코드 정적 분석(Reverse Engineering)을 통해 도출된 내용입니다.
 > 
 > 실제 기기 웹 UI 진입 및 기능 동작 검증은 아직 수행되지 않았으며, 추후 연구 및 하드웨어 복구/개조를 위한 참고용 초안입니다.
+> 
+> 📦 **분석용 순정 롬 덤프 다운로드**: [GitHub Releases (stock-dump-v1.4.0)](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/stock-dump-v1.4.0) · [덤프 안내 문서](../dumps/README.md)
 
 ---
 

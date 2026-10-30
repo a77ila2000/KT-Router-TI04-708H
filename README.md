@@ -2,7 +2,7 @@
 
 allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입니다. 처음 설치하는 사용자는 **[설치 안내](INSTALLATION.md)**에서 준비 조건부터 순서대로 확인하세요.
 
-**[⬇ 설치 이미지·도구 ZIP 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/download/v25.12.6-ti04-r1/ti04-openwrt-25.12.6-r1-install.zip)** · **[GitHub 릴리스](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/v25.12.6-ti04-r1)** · **[설치 순서](INSTALLATION.md)**
+**[⬇ 설치 이미지·도구 ZIP 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/download/v25.12.6-ti04-r1/ti04-openwrt-25.12.6-r1-install.zip)** · **[OpenWrt 릴리스](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/v25.12.6-ti04-r1)** · **[순정 롬/덤프 다운로드](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/stock-dump-v1.4.0)** · **[설치 순서](INSTALLATION.md)**
 
 > **실제 TI04 공유기 1대에 설치·기능 테스트 완료 — 공개 r1은 추가 실기 검증 전**
 >
@@ -66,5 +66,6 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 | [하드웨어·미검증 아이디어](RESEARCH_NOTES.md) | 기존 README 원문 보존, 설치 순서와 구분 |
 | [개발 인수인계](docs/HANDOFF.md) | 배포 작업을 이어갈 개발자용 |
 | **[순정 8801 관리자 역공학 노트 (미검증)](docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)** | 순정 펌웨어 8801 포트, `ktadmin` 인증 알고리즘 및 웹 펌웨어 업그레이드 분석 |
+| **[순정 롬/펌웨어 덤프 안내](dumps/README.md)** | 온보드 NOR 부트로더, NAND 128MB 전체 덤프(xz), Rootfs, Kernel 다운로드 및 언팩 가이드 |
 
-미검증 실험 아이디어와 과거 실패 기록을 보존합니다. 원본 NOR/NAND·ART·계정·SSH 키·개인용 이미지·전체 로그는 공개하지 않습니다. 공개 설치 이미지는 공식 구성요소에서 새로 만들었습니다.
+미검증 실험 아이디어와 분석 기록을 보존합니다. 순정 롬 덤프 원본은 외부 분석 및 복구를 위해 [GitHub Releases: stock-dump-v1.4.0](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/stock-dump-v1.4.0)에서 제공하며, 공개 OpenWrt 설치 이미지는 공식 구성요소에서 새로 제작되었습니다.
