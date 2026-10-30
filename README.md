@@ -65,7 +65,7 @@ allRadio **TI04-708H / WGHE010100**에 OpenWrt를 설치하기 위한 자료입�
 | [설치 제약 분석](OPENWRT_INSTALLATION_ANALYSIS_REPORT.md) | 제조사 U-Boot/FIT/파티션 설명 |
 | [하드웨어·미검증 아이디어](RESEARCH_NOTES.md) | 기존 README 원문 보존, 설치 순서와 구분 |
 | [개발 인수인계](docs/HANDOFF.md) | 배포 작업을 이어갈 개발자용 |
-| **[순정 8801 관리자 역공학 노트 (미검증)](docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)** | 순정 펌웨어 8801 포트, `ktadmin` 인증 알고리즘 및 웹 펌웨어 업그레이드 분석 |
+| **[순정 관리자 정적 검증·남은 과제](docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)** | 2026-10-30 인증·암호화·포트·제조사 업그레이드 형식 오류 정정. 순정 실기 로그인·웹 OpenWrt 설치는 미검증 |
 | **[순정 롬/펌웨어 덤프 안내](dumps/README.md)** | 온보드 NOR 부트로더, NAND 128MB 전체 덤프(xz), Rootfs, Kernel 다운로드 및 언팩 가이드 |
 
 미검증 실험 아이디어와 분석 기록을 보존합니다. 순정 롬 덤프 원본은 외부 분석 및 복구를 위해 [GitHub Releases: stock-dump-v1.4.0](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/stock-dump-v1.4.0)에서 제공하며, 공개 OpenWrt 설치 이미지는 공식 구성요소에서 새로 제작되었습니다.

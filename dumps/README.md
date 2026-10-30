@@ -1,6 +1,6 @@
 # KT GiGA WiFi Wave 2 (TI04-708H) 순정 롬/펌웨어 덤프 안내
 
-KT GiGA WiFi Wave 2 유무선 공유기(제조사: 올래디오, 모델명: **TI04-708H / WGHE010100**, Qualcomm IPQ4019 SoC)의 순정 펌웨어 분석, 역공학 및 OpenWrt 포팅을 위한 원본 플래시 덤프 자산입니다.
+KT GiGA WiFi Wave 2 유무선 공유기(제조사: 올래디오, 모델명: **TI04-708H / WGHE010100**, 실물 U16 마킹: Qualcomm **IPQ4018**)의 순정 펌웨어 분석, 역공학 및 OpenWrt 포팅을 위한 원본 플래시 덤프 자산입니다. IPQ4019 공통 플랫폼/드라이버 문자열과 실물 칩 식별을 구분합니다. [하드웨어 근거](../RESEARCH_NOTES.md#사양-근거와-판정-범위)를 참고하세요.
 
 전체 대용량 덤프 파일은 **[GitHub Releases: stock-dump-v1.4.0](https://github.com/a77ila2000/KT-Router-TI04-708H/releases/tag/stock-dump-v1.4.0)** 에서 직접 다운로드할 수 있습니다.
 
@@ -53,7 +53,7 @@ KT GiGA WiFi Wave 2 유무선 공유기(제조사: 올래디오, 모델명: **TI
   unsquashfs -d stock-rootfs ti04-708h-stock-rootfs.ubifs
   ```
 - **포함된 주요 분석 자산**:
-  - 웹서버 설정 및 소스: `/etc/lighttpd.conf`, `/www/` (PHP CGI 파일들)
+  - 웹서버 설정 생성 코드: `/bin/rc`가 `/var/etc/lighttpd.conf`를 생성. 웹 소스는 `/www/`의 Yaf/PHP 애플리케이션
   - KT 공유기 전용 관리 데몬: `/bin/rc`, `/bin/board`, `/bin/kt_mon` 등
   - 포트 8801 / 8899 관리자 페이지 소스 및 인증 로직 (`ktadmin`, `GIGALAND1409` salt)
 
@@ -70,10 +70,11 @@ KT GiGA WiFi Wave 2 유무선 공유기(제조사: 올래디오, 모델명: **TI
 
 ## 🛠️ 분석 가이드 및 관련 문서
 
-- **[순정 8801 관리자 역공학 노트](../docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)**:
-  - 8801 포트 방화벽 해제 및 `lighttpd` 라우팅 구조
-  - `ktadmin` 인증 알고리즘 (MAC + salt MD5 해시 생성 원리)
-  - 히든 관리자 메뉴 (펌웨어 수동 업그레이드, 브릿지 모드 등 35개 이상 화면)
+- **[순정 관리자 정적 검증·남은 과제](../docs/STOCK_FIRMWARE_ADMIN_ANALYSIS_UNVERIFIED.md)**:
+  - 설정값에 따른 사용자/관리자 포트 분리 및 `lighttpd` 라우팅. 방화벽 해제·접속 성공을 검증한 기록은 아님
+  - 조건부 `ktadmin` 초기화, MAC/모델명 정규화, MD5 앞 10자와 SHA256 파생 키의 AES-256-CBC 저장 형식
+  - 관리자 뷰 파일 60개 존재(레이아웃·오류·진행 화면 포함). 브릿지 접근 조건과 TR069 비활성화의 검증 한계
+  - 제조사 암호화 업그레이드 패키지·MD5 검사·slot 전환. 일반 OpenWrt 파일의 순정 웹 설치는 미검증
 - **[설치 제약 분석 보고서](../OPENWRT_INSTALLATION_ANALYSIS_REPORT.md)**:
   - 제조사 부트로더, FIT 이미지 서명 검증 및 파티션 구조 상세
 
